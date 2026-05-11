@@ -2,6 +2,7 @@
   "name": "cronbox",
   "private": true,
   "version": "0.1.0",
+  "description": "Local-first menu bar scheduler for scripts and coding-agent tasks.",
   "type": "module",
   "scripts": {
     "dev": "vite",

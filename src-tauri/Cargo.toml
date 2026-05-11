@@ -2,6 +2,7 @@
 name = "cronbox"
 version = "0.1.0"
 edition = "2021"
+description = "Local-first menu bar scheduler for scripts and coding-agent tasks."
 
 [lib]
 name = "cronbox_lib"
