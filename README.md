@@ -37,6 +37,20 @@ cd src-tauri
 cargo test
 ```
 
+## Packaging
+
+GitHub Actions builds installers for macOS, Linux, and Windows.
+
+- Pushes to `main`, pull requests, and manual workflow runs upload package artifacts.
+- Tags matching `v*`, for example `v0.1.0`, also create a draft GitHub Release with the generated installers attached.
+
+Create a release build:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 ## CLI
 
 The desktop app installs the `cronbox` command on startup when possible. You can also install it manually from Settings or with:
