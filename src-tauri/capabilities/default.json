@@ -1,0 +1,12 @@
+{
+  "identifier": "default",
+  "description": "CronBox default capabilities",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "dialog:allow-open",
+    "shell:default",
+    "shell:allow-open"
+  ]
+}
