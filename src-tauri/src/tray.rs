@@ -6,7 +6,6 @@ use tauri::{
 };
 
 use crate::db::Database;
-use crate::hide_from_dock;
 use crate::models::{Job, Schedule};
 
 /// Set up the system tray icon with initial menu
@@ -22,7 +21,6 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(w) = app.get_webview_window("main") {
                     let _ = w.show();
                     let _ = w.set_focus();
-                    hide_from_dock(app);
                 }
             }
             "quit" => {
