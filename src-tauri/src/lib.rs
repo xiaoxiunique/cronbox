@@ -109,9 +109,9 @@ fn configure_menu_bar_runtime(app: &mut tauri::App) {
     }
 }
 
-pub(crate) fn hide_from_dock(app: &tauri::AppHandle) {
+pub(crate) fn hide_from_dock(_app: &tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     {
-        let _ = app.set_dock_visibility(false);
+        let _ = _app.set_dock_visibility(false);
     }
 }
