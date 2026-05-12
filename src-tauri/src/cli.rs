@@ -56,7 +56,6 @@ fn run(args: Vec<String>) -> Result<i32, String> {
             println!("{}", cli_status_text(None));
             Ok(0)
         }
-        "open" => open_app(),
         "add" => run_add(&args[1..]),
         "dirs" | "dir" => run_dirs(&args[1..]),
         "scripts" | "script" => run_scripts(&args[1..]),
@@ -698,44 +697,12 @@ fn create_link_or_copy(exe: &Path, target: &Path) -> Result<(), String> {
         .map_err(|e| format!("cannot copy {} -> {}: {e}", exe.display(), target.display()))
 }
 
-fn open_app() -> Result<i32, String> {
-    let exe = env::current_exe().map_err(|e| e.to_string())?;
-    if let Some(app_path) = find_app_bundle(&exe) {
-        std::process::Command::new("open")
-            .arg(app_path)
-            .spawn()
-            .map_err(|e| format!("failed to open CronBox.app: {e}"))?;
-    } else {
-        std::process::Command::new("open")
-            .args(["-a", "CronBox"])
-            .spawn()
-            .map_err(|e| format!("failed to open CronBox: {e}"))?;
-    }
-    Ok(0)
-}
-
-fn find_app_bundle(exe: &Path) -> Option<PathBuf> {
-    let mut path = exe;
-    while let Some(parent) = path.parent() {
-        if parent
-            .extension()
-            .and_then(|e| e.to_str())
-            .is_some_and(|e| e == "app")
-        {
-            return Some(parent.to_path_buf());
-        }
-        path = parent;
-    }
-    None
-}
-
 fn print_help() {
     println!(
         r#"CronBox CLI
 
 Usage:
   cronbox help
-  cronbox open
   cronbox add <directory>
   cronbox install-cli [--target PATH] [--force]
   cronbox cli-status
@@ -762,9 +729,15 @@ Usage:
   cronbox run <base-dir> <script-path> [--args JSON]
 
 Notes:
+  CronBox is a local-first menu-bar scheduler for scripts and coding-agent tasks.
+  The CLI shares the same local data as the desktop app, but it does not open or
+  control the UI.
+  Start with `cronbox add <directory>` to register a scripts directory. CronBox
+  scans the directory and only lists files with executable entrypoints.
+  Then use `cronbox scripts list` to inspect discovered scripts, and
+  `cronbox schedules add <script-file> <cron> [--dir DIR]` to schedule one.
   Quote cron expressions, for example: "0 * * * *"
   Use --args @file.json to load JSON args from a file.
-  `cronbox add <directory>` only lists scripts with an executable entrypoint.
   Scheduled jobs run while the CronBox app is open or hidden in the menu bar.
 "#
     );

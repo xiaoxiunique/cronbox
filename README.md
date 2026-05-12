@@ -63,7 +63,9 @@ git push origin v0.1.0
 
 ## CLI
 
-The desktop app installs the `cronbox` command on startup when possible. You can also install it manually from Settings or with:
+The desktop app installs the `cronbox` command on startup when possible. The CLI shares the same local data as the desktop app, but it does not open or control the UI. Running `cronbox` without arguments prints usage help.
+
+You can also install it manually from Settings or with:
 
 ```bash
 bun run install-cli
