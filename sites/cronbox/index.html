@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>CronBox - Local-first script scheduler</title>
+    <title>CronBox - 本地优先的脚本调度器</title>
     <meta
       name="description"
-      content="CronBox is a local-first menu bar scheduler for scripts, cron jobs, and coding-agent tasks."
+      content="CronBox 是一个本地优先的菜单栏调度器，用来管理脚本、cron job 和 coding agent 任务。"
     />
     <style>
       :root {
@@ -126,6 +126,12 @@
         backdrop-filter: blur(18px);
       }
 
+      .nav-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
       .nav-links a {
         padding: 8px 13px;
         border-radius: 999px;
@@ -136,6 +142,45 @@
       .nav-links a:hover {
         background: rgba(255, 255, 255, 0.1);
         color: var(--ink);
+      }
+
+      .lang-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 5px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        backdrop-filter: blur(18px);
+      }
+
+      .lang-toggle button {
+        appearance: none;
+        min-width: 36px;
+        padding: 8px 10px;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 720;
+        line-height: 1;
+        transition:
+          background 160ms ease,
+          color 160ms ease;
+      }
+
+      .lang-toggle button:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--ink);
+      }
+
+      .lang-toggle button.active {
+        background: linear-gradient(180deg, #ffc95c, #d98f24);
+        color: #1b1307;
       }
 
       .hero {
@@ -568,11 +613,12 @@
 
       .footer {
         display: flex;
-        justify-content: space-between;
+        justify-content: center;
         gap: 20px;
         padding: 32px 0 50px;
         color: var(--quiet);
         font-size: 13px;
+        text-align: center;
       }
 
       @media (max-width: 920px) {
@@ -612,6 +658,15 @@
           justify-content: flex-start;
         }
 
+        .nav-actions {
+          width: 100%;
+          flex-wrap: wrap;
+        }
+
+        .lang-toggle {
+          margin-left: auto;
+        }
+
         h1 {
           font-size: 52px;
         }
@@ -638,39 +693,43 @@
   </head>
   <body>
     <div class="shell">
-      <nav class="nav" aria-label="Primary navigation">
+      <nav class="nav" aria-label="Primary navigation" data-i18n-aria-label="navLabel">
         <a class="brand" href="#">
           <span class="mark">cb</span>
           <span>CronBox</span>
         </a>
-        <div class="nav-links">
-          <a href="#features">Features</a>
-          <a href="#agents">Agent tasks</a>
-          <a href="#cli">CLI</a>
-          <a href="#workflow">Workflow</a>
+        <div class="nav-actions">
+          <div class="nav-links">
+            <a href="#features" data-i18n="navFeatures">功能</a>
+            <a href="#agents" data-i18n="navAgents">Agent 任务</a>
+            <a href="#cli" data-i18n="navCli">CLI</a>
+            <a href="#workflow" data-i18n="navWorkflow">流程</a>
+          </div>
+          <div class="lang-toggle" aria-label="Language">
+            <button type="button" data-lang="zh" class="active">中</button>
+            <button type="button" data-lang="en">EN</button>
+          </div>
         </div>
       </nav>
 
       <main>
         <section class="hero">
           <div>
-            <div class="eyebrow"><span class="pulse"></span> Local scheduler for scripts that matter</div>
-            <h1>Run your cron jobs from a menu bar, not a server.</h1>
-            <p class="hero-copy">
-              CronBox watches local script folders, schedules executable entrypoints, streams logs,
-              and keeps run history beside every script. It also turns Codex and Claude prompts into
-              repeatable local jobs.
+            <div class="eyebrow"><span class="pulse"></span> <span data-i18n="eyebrow">为重要脚本准备的本地调度器</span></div>
+            <h1 data-i18n="heroTitle">把 cron job 放进菜单栏，而不是服务器。</h1>
+            <p class="hero-copy" data-i18n="heroCopy">
+              CronBox 会监听本地脚本目录，调度真正可执行的入口，实时展示日志，并把运行历史放在每个脚本旁边。它也能把 Codex 和 Claude 提示词变成可重复执行的本地任务。
             </p>
             <div class="actions">
-              <a class="button primary" href="#cli">See CLI flow</a>
-              <a class="button" href="#features">Explore features</a>
+              <a class="button primary" href="#cli" data-i18n="heroPrimary">查看 CLI 流程</a>
+              <a class="button" href="#features" data-i18n="heroSecondary">浏览功能</a>
             </div>
           </div>
 
-          <aside class="hero-panel" aria-label="CronBox interface preview">
+          <aside class="hero-panel" aria-label="CronBox interface preview" data-i18n-aria-label="previewLabel">
             <div class="window-top">
               <div class="traffic"><span></span><span></span><span></span></div>
-              <div class="window-title">CronBox / scheduled</div>
+              <div class="window-title" data-i18n="windowTitle">CronBox / 已调度</div>
             </div>
             <div class="scheduler">
               <div class="job-row">
@@ -679,7 +738,7 @@
                   <div class="job-name">chain-health-report</div>
                   <div class="job-meta">0 9 * * * · Asia/Shanghai</div>
                 </div>
-                <div class="badge">next 09:00</div>
+                <div class="badge" data-i18n="badgeNext">下次 09:00</div>
               </div>
               <div class="job-row">
                 <div class="logo sh">sh</div>
@@ -687,7 +746,7 @@
                   <div class="job-name">sync-indexer-cache</div>
                   <div class="job-meta">*/15 * * * * · workspace-write</div>
                 </div>
-                <div class="badge">running</div>
+                <div class="badge" data-i18n="badgeRunning">运行中</div>
               </div>
               <div class="job-row">
                 <div class="logo ai">ai</div>
@@ -695,7 +754,7 @@
                   <div class="job-name">codex-weekly-maintenance</div>
                   <div class="job-meta">AGENTS.md · ~/.cronbox</div>
                 </div>
-                <div class="badge">enabled</div>
+                <div class="badge" data-i18n="badgeEnabled">已启用</div>
               </div>
             </div>
             <pre class="log">[09:00:01] start chain-health-report
@@ -707,32 +766,31 @@
 
         <section class="section" id="features">
           <div class="section-head">
-            <h2>Built for local operational scripts.</h2>
-            <p>
-              CronBox behaves more like a small Windmill-style control surface than a generic cron
-              editor. The primary object is the run history and the log, not decorative scheduling chrome.
+            <h2 data-i18n="featuresTitle">为本地运维脚本而设计。</h2>
+            <p data-i18n="featuresCopy">
+              CronBox 更像一个轻量的 Windmill 风格控制台，而不是普通 cron 编辑器。核心对象是运行历史和日志，不是装饰性的调度表单。
             </p>
           </div>
           <div class="feature-grid">
             <article class="feature">
               <div class="num">01</div>
-              <h3>Entrypoint scanning</h3>
-              <p>Only scripts that can actually run are surfaced when you add a directory.</p>
+              <h3 data-i18n="feature1Title">入口扫描</h3>
+              <p data-i18n="feature1Copy">添加目录时，只展示真正能运行的脚本。</p>
             </article>
             <article class="feature">
               <div class="num">02</div>
-              <h3>Menu bar runtime</h3>
-              <p>Close the main window and scheduled jobs keep running from the menu bar process.</p>
+              <h3 data-i18n="feature2Title">菜单栏后台运行</h3>
+              <p data-i18n="feature2Copy">关闭主窗口后，已调度任务仍会通过菜单栏进程继续运行。</p>
             </article>
             <article class="feature">
               <div class="num">03</div>
-              <h3>Live logs</h3>
-              <p>stdout and stderr stream into job history while the process is still active.</p>
+              <h3 data-i18n="feature3Title">实时日志</h3>
+              <p data-i18n="feature3Copy">进程还在运行时，stdout 和 stderr 就会持续写入任务历史。</p>
             </article>
             <article class="feature">
               <div class="num">04</div>
-              <h3>Skip overlap</h3>
-              <p>If the previous scheduled run is still queued or running, the next tick is skipped.</p>
+              <h3 data-i18n="feature4Title">跳过重叠执行</h3>
+              <p data-i18n="feature4Copy">如果上一轮调度还在排队或运行，下一次 tick 会自动跳过。</p>
             </article>
           </div>
         </section>
@@ -740,28 +798,31 @@
         <section class="section" id="agents">
           <div class="split">
             <div class="copy-panel">
-              <h3>Schedule coding agents like any other script.</h3>
-              <p>
-                CronBox can create Codex and Claude Code task scripts under a default local workspace.
-                That workspace carries durable rules files, so scheduled agent runs behave consistently.
+              <h3 data-i18n="agentsTitle">像调度脚本一样调度 coding agent。</h3>
+              <p data-i18n="agentsCopy">
+                CronBox 可以在默认本地工作区下创建 Codex 和 Claude Code 任务脚本。这个工作区会保存持久化规则文件，让定时执行的 agent 行为保持一致。
               </p>
               <div class="mini-list">
                 <div>
-                  <strong>Workspace</strong>
-                  <span>Agent tasks run from <code>~/.cronbox</code> by default.</span>
+                  <strong data-i18n="workspaceTitle">工作区</strong>
+                  <span><span data-i18n="workspaceCopy">Agent 任务默认从</span> <code>~/.cronbox</code> <span data-i18n="workspaceCopySuffix">运行。</span></span>
                 </div>
                 <div>
-                  <strong>Rules</strong>
-                  <span><code>AGENTS.md</code> and <code>CLAUDE.md</code> live beside the generated tasks.</span>
+                  <strong data-i18n="rulesTitle">规则</strong>
+                  <span><code>AGENTS.md</code> <span data-i18n="rulesCopy">和</span> <code>CLAUDE.md</code> <span data-i18n="rulesCopySuffix">会和生成的任务放在一起。</span></span>
                 </div>
                 <div>
-                  <strong>History</strong>
-                  <span>Each run keeps metadata, inputs, output, error, duration, and logs together.</span>
+                  <strong data-i18n="historyTitle">历史</strong>
+                  <span data-i18n="historyCopy">每次运行都会把元数据、输入、输出、错误、耗时和日志放在一起。</span>
                 </div>
               </div>
             </div>
             <div class="code-panel">
-              <div class="code-tabs"><span>codex task</span><span>claude task</span><span>logs</span></div>
+              <div class="code-tabs">
+                <span data-i18n="codeTabCodex">codex 任务</span>
+                <span data-i18n="codeTabClaude">claude 任务</span>
+                <span data-i18n="codeTabLogs">日志</span>
+              </div>
               <pre><span class="comment"># Generated by CronBox</span>
 cd ~/.cronbox
 
@@ -778,14 +839,11 @@ cd ~/.cronbox
 
         <section class="section" id="cli">
           <div class="section-head">
-            <h2>Manage it from the app or terminal.</h2>
-            <p>
-              The desktop app installs a companion <code>cronbox</code> command when possible, so local
-              automation can be scripted without opening the UI.
-            </p>
+            <h2 data-i18n="cliTitle">可以从 App 或终端管理。</h2>
+            <p><span data-i18n="cliCopyPrefix">桌面 App 会在可行时自动安装配套的</span> <code>cronbox</code> <span data-i18n="cliCopySuffix">命令，这样本地自动化不打开 UI 也能脚本化管理。</span></p>
           </div>
           <div class="code-panel">
-            <div class="code-tabs"><span>terminal</span></div>
+            <div class="code-tabs"><span data-i18n="codeTabTerminal">终端</span></div>
             <pre>cronbox add ~/scripts
 cronbox scripts list
 cronbox schedules add ./daily-report.sh "0 9 * * *" --tz Asia/Shanghai
@@ -796,36 +854,203 @@ cronbox run ~/scripts daily-report.sh --args '{"date":"today"}'</pre>
 
         <section class="section" id="workflow">
           <div class="section-head">
-            <h2>A compact loop for recurring local work.</h2>
-            <p>
-              CronBox keeps the operational path short: scan, schedule, watch logs, inspect history,
-              adjust, repeat.
+            <h2 data-i18n="workflowTitle">一个紧凑的本地周期任务闭环。</h2>
+            <p data-i18n="workflowCopy">
+              CronBox 把操作路径压短：扫描、调度、看日志、查历史、调整，然后重复。
             </p>
           </div>
           <div class="steps">
             <article class="step">
               <span>1</span>
-              <h3>Add a directory</h3>
-              <p>Point CronBox at a script folder. Non-runnable files stay out of the list.</p>
+              <h3 data-i18n="step1Title">添加目录</h3>
+              <p data-i18n="step1Copy">把 CronBox 指向脚本目录，不可运行文件不会出现在列表里。</p>
             </article>
             <article class="step">
               <span>2</span>
-              <h3>Configure one dialog</h3>
-              <p>Edit alias, cron expression, timezone, args, and enabled state in one place.</p>
+              <h3 data-i18n="step2Title">在一个弹框里配置</h3>
+              <p data-i18n="step2Copy">别名、cron 表达式、时区、参数和启用状态都在一个地方编辑。</p>
             </article>
             <article class="step">
               <span>3</span>
-              <h3>Read the log</h3>
-              <p>Use the detail view as the source of truth for inputs, history, result, and output.</p>
+              <h3 data-i18n="step3Title">阅读日志</h3>
+              <p data-i18n="step3Copy">详情页以日志为核心，把输入、历史、结果和输出放在同一个上下文里。</p>
             </article>
           </div>
         </section>
       </main>
 
       <footer class="footer">
-        <span>CronBox · local-first scheduling for scripts and agent tasks</span>
-        <span>Tauri 2 · Vue 3 · Rust · Cloudflare Pages ready</span>
+        <span data-i18n="footer">CronBox · 本地优先的脚本和 agent 任务调度器</span>
       </footer>
     </div>
+    <script>
+      const messages = {
+        zh: {
+          title: 'CronBox - 本地优先的脚本调度器',
+          description: 'CronBox 是一个本地优先的菜单栏调度器，用来管理脚本、cron job 和 coding agent 任务。',
+          navLabel: '主导航',
+          previewLabel: 'CronBox 界面预览',
+          navFeatures: '功能',
+          navAgents: 'Agent 任务',
+          navCli: 'CLI',
+          navWorkflow: '流程',
+          eyebrow: '为重要脚本准备的本地调度器',
+          heroTitle: '把 cron job 放进菜单栏，而不是服务器。',
+          heroCopy:
+            'CronBox 会监听本地脚本目录，调度真正可执行的入口，实时展示日志，并把运行历史放在每个脚本旁边。它也能把 Codex 和 Claude 提示词变成可重复执行的本地任务。',
+          heroPrimary: '查看 CLI 流程',
+          heroSecondary: '浏览功能',
+          windowTitle: 'CronBox / 已调度',
+          badgeNext: '下次 09:00',
+          badgeRunning: '运行中',
+          badgeEnabled: '已启用',
+          featuresTitle: '为本地运维脚本而设计。',
+          featuresCopy:
+            'CronBox 更像一个轻量的 Windmill 风格控制台，而不是普通 cron 编辑器。核心对象是运行历史和日志，不是装饰性的调度表单。',
+          feature1Title: '入口扫描',
+          feature1Copy: '添加目录时，只展示真正能运行的脚本。',
+          feature2Title: '菜单栏后台运行',
+          feature2Copy: '关闭主窗口后，已调度任务仍会通过菜单栏进程继续运行。',
+          feature3Title: '实时日志',
+          feature3Copy: '进程还在运行时，stdout 和 stderr 就会持续写入任务历史。',
+          feature4Title: '跳过重叠执行',
+          feature4Copy: '如果上一轮调度还在排队或运行，下一次 tick 会自动跳过。',
+          agentsTitle: '像调度脚本一样调度 coding agent。',
+          agentsCopy:
+            'CronBox 可以在默认本地工作区下创建 Codex 和 Claude Code 任务脚本。这个工作区会保存持久化规则文件，让定时执行的 agent 行为保持一致。',
+          workspaceTitle: '工作区',
+          workspaceCopy: 'Agent 任务默认从',
+          workspaceCopySuffix: '运行。',
+          rulesTitle: '规则',
+          rulesCopy: '和',
+          rulesCopySuffix: '会和生成的任务放在一起。',
+          historyTitle: '历史',
+          historyCopy: '每次运行都会把元数据、输入、输出、错误、耗时和日志放在一起。',
+          codeTabCodex: 'codex 任务',
+          codeTabClaude: 'claude 任务',
+          codeTabLogs: '日志',
+          cliTitle: '可以从 App 或终端管理。',
+          cliCopyPrefix: '桌面 App 会在可行时自动安装配套的',
+          cliCopySuffix: '命令，这样本地自动化不打开 UI 也能脚本化管理。',
+          codeTabTerminal: '终端',
+          workflowTitle: '一个紧凑的本地周期任务闭环。',
+          workflowCopy: 'CronBox 把操作路径压短：扫描、调度、看日志、查历史、调整，然后重复。',
+          step1Title: '添加目录',
+          step1Copy: '把 CronBox 指向脚本目录，不可运行文件不会出现在列表里。',
+          step2Title: '在一个弹框里配置',
+          step2Copy: '别名、cron 表达式、时区、参数和启用状态都在一个地方编辑。',
+          step3Title: '阅读日志',
+          step3Copy: '详情页以日志为核心，把输入、历史、结果和输出放在同一个上下文里。',
+          footer: 'CronBox · 本地优先的脚本和 agent 任务调度器'
+        },
+        en: {
+          title: 'CronBox - Local-first script scheduler',
+          description:
+            'CronBox is a local-first menu bar scheduler for scripts, cron jobs, and coding-agent tasks.',
+          navLabel: 'Primary navigation',
+          previewLabel: 'CronBox interface preview',
+          navFeatures: 'Features',
+          navAgents: 'Agent tasks',
+          navCli: 'CLI',
+          navWorkflow: 'Workflow',
+          eyebrow: 'Local scheduler for scripts that matter',
+          heroTitle: 'Run your cron jobs from a menu bar, not a server.',
+          heroCopy:
+            'CronBox watches local script folders, schedules executable entrypoints, streams logs, and keeps run history beside every script. It also turns Codex and Claude prompts into repeatable local jobs.',
+          heroPrimary: 'See CLI flow',
+          heroSecondary: 'Explore features',
+          windowTitle: 'CronBox / scheduled',
+          badgeNext: 'next 09:00',
+          badgeRunning: 'running',
+          badgeEnabled: 'enabled',
+          featuresTitle: 'Built for local operational scripts.',
+          featuresCopy:
+            'CronBox behaves more like a small Windmill-style control surface than a generic cron editor. The primary object is the run history and the log, not decorative scheduling chrome.',
+          feature1Title: 'Entrypoint scanning',
+          feature1Copy: 'Only scripts that can actually run are surfaced when you add a directory.',
+          feature2Title: 'Menu bar runtime',
+          feature2Copy:
+            'Close the main window and scheduled jobs keep running from the menu bar process.',
+          feature3Title: 'Live logs',
+          feature3Copy: 'stdout and stderr stream into job history while the process is still active.',
+          feature4Title: 'Skip overlap',
+          feature4Copy:
+            'If the previous scheduled run is still queued or running, the next tick is skipped.',
+          agentsTitle: 'Schedule coding agents like any other script.',
+          agentsCopy:
+            'CronBox can create Codex and Claude Code task scripts under a default local workspace. That workspace carries durable rules files, so scheduled agent runs behave consistently.',
+          workspaceTitle: 'Workspace',
+          workspaceCopy: 'Agent tasks run from',
+          workspaceCopySuffix: 'by default.',
+          rulesTitle: 'Rules',
+          rulesCopy: 'and',
+          rulesCopySuffix: 'live beside the generated tasks.',
+          historyTitle: 'History',
+          historyCopy: 'Each run keeps metadata, inputs, output, error, duration, and logs together.',
+          codeTabCodex: 'codex task',
+          codeTabClaude: 'claude task',
+          codeTabLogs: 'logs',
+          cliTitle: 'Manage it from the app or terminal.',
+          cliCopyPrefix: 'The desktop app installs a companion',
+          cliCopySuffix:
+            'command when possible, so local automation can be scripted without opening the UI.',
+          codeTabTerminal: 'terminal',
+          workflowTitle: 'A compact loop for recurring local work.',
+          workflowCopy:
+            'CronBox keeps the operational path short: scan, schedule, watch logs, inspect history, adjust, repeat.',
+          step1Title: 'Add a directory',
+          step1Copy: 'Point CronBox at a script folder. Non-runnable files stay out of the list.',
+          step2Title: 'Configure one dialog',
+          step2Copy: 'Edit alias, cron expression, timezone, args, and enabled state in one place.',
+          step3Title: 'Read the log',
+          step3Copy:
+            'Use the detail view as the source of truth for inputs, history, result, and output.',
+          footer: 'CronBox · local-first scheduling for scripts and agent tasks'
+        }
+      };
+
+      const descriptionMeta = document.querySelector('meta[name="description"]');
+      const languageButtons = document.querySelectorAll('[data-lang]');
+      const browserLanguage = navigator.language?.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+      const savedLanguage = localStorage.getItem('cronbox-language');
+      const initialLanguage = messages[savedLanguage] ? savedLanguage : browserLanguage;
+
+      function setLanguage(language) {
+        const dictionary = messages[language] || messages.zh;
+        document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
+        document.title = dictionary.title;
+        descriptionMeta?.setAttribute('content', dictionary.description);
+
+        document.querySelectorAll('[data-i18n]').forEach((node) => {
+          const key = node.dataset.i18n;
+          if (key && dictionary[key]) {
+            node.textContent = dictionary[key];
+          }
+        });
+
+        document.querySelectorAll('[data-i18n-aria-label]').forEach((node) => {
+          const key = node.dataset.i18nAriaLabel;
+          if (key && dictionary[key]) {
+            node.setAttribute('aria-label', dictionary[key]);
+          }
+        });
+
+        languageButtons.forEach((button) => {
+          const isActive = button.dataset.lang === language;
+          button.classList.toggle('active', isActive);
+          button.setAttribute('aria-pressed', String(isActive));
+        });
+
+        localStorage.setItem('cronbox-language', language);
+      }
+
+      languageButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          setLanguage(button.dataset.lang || 'zh');
+        });
+      });
+
+      setLanguage(initialLanguage);
+    </script>
   </body>
 </html>
