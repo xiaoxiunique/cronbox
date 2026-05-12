@@ -8,6 +8,7 @@ pub mod state;
 pub mod tray;
 
 use state::AppState;
+use tauri::Manager;
 
 pub fn run() {
     let db_path = cli::default_db_path();
@@ -25,6 +26,8 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(app_state)
         .setup(move |app| {
+            configure_menu_bar_runtime(app);
+
             // Set up system tray
             let _ = tray::setup_tray(app.handle());
 
@@ -57,6 +60,7 @@ pub fn run() {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     let _ = window.hide();
+                    hide_from_dock(window.app_handle());
                 }
             }
         })
@@ -90,4 +94,23 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running CronBox");
+}
+
+fn configure_menu_bar_runtime(app: &mut tauri::App) {
+    #[cfg(target_os = "macos")]
+    {
+        app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+        app.set_dock_visibility(false);
+    }
+
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_skip_taskbar(true);
+    }
+}
+
+pub(crate) fn hide_from_dock(app: &tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app.set_dock_visibility(false);
+    }
 }
