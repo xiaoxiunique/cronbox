@@ -18,10 +18,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .tooltip("CronBox")
         .on_menu_event(move |app, event| match event.id().as_ref() {
             "show" => {
-                if let Some(w) = app.get_webview_window("main") {
-                    let _ = w.show();
-                    let _ = w.set_focus();
-                }
+                show_main_window(app);
             }
             "quit" => {
                 app.exit(0);
@@ -31,6 +28,39 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .build(app)?;
 
     Ok(())
+}
+
+fn show_main_window(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        if let Err(err) = app.set_activation_policy(tauri::ActivationPolicy::Accessory) {
+            eprintln!("cronbox tray show: failed to set activation policy: {err}");
+        }
+        if let Err(err) = app.set_dock_visibility(false) {
+            eprintln!("cronbox tray show: failed to hide dock icon: {err}");
+        }
+    }
+
+    let Some(window) = app.get_webview_window("main") else {
+        eprintln!("cronbox tray show: main window not found");
+        return;
+    };
+
+    if let Err(err) = window.unminimize() {
+        eprintln!("cronbox tray show: failed to unminimize main window: {err}");
+    }
+    if let Err(err) = window.show() {
+        eprintln!("cronbox tray show: failed to show main window: {err}");
+    }
+    if let Err(err) = window.set_always_on_top(true) {
+        eprintln!("cronbox tray show: failed to raise main window: {err}");
+    }
+    if let Err(err) = window.set_always_on_top(false) {
+        eprintln!("cronbox tray show: failed to restore main window z-order: {err}");
+    }
+    if let Err(err) = window.set_focus() {
+        eprintln!("cronbox tray show: failed to focus main window: {err}");
+    }
 }
 
 /// Rebuild the tray menu showing scheduled scripts and running jobs.

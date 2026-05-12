@@ -60,7 +60,7 @@ pub fn run() {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     let _ = window.hide();
-                    hide_from_dock(window.app_handle());
+                    hide_menu_bar_app(window.app_handle());
                 }
             }
         })
@@ -109,9 +109,12 @@ fn configure_menu_bar_runtime(app: &mut tauri::App) {
     }
 }
 
-pub(crate) fn hide_from_dock(_app: &tauri::AppHandle) {
+pub(crate) fn hide_menu_bar_app(_app: &tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     {
+        if let Err(err) = _app.set_activation_policy(tauri::ActivationPolicy::Accessory) {
+            eprintln!("cronbox hide: failed to set activation policy: {err}");
+        }
         let _ = _app.set_dock_visibility(false);
     }
 }
