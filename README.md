@@ -4,6 +4,10 @@ CronBox is a local-first menu bar scheduler for scripts and coding-agent tasks.
 
 It scans folders for executable entry scripts, lets you run them manually or on a cron schedule, and keeps run history with live logs in one place. Scheduled jobs keep running while the main window is closed, as long as CronBox is still active in the menu bar.
 
+## Status
+
+CronBox is early-stage software. Expect rough edges around packaging, platform-specific permissions, and coding-agent task execution. Issues and focused pull requests are welcome.
+
 ## Features
 
 - Add script directories and only surface files with executable entrypoints.
@@ -18,6 +22,12 @@ It scans folders for executable entry scripts, lets you run them manually or on 
 ## Development
 
 CronBox is built with Tauri 2, Vue 3, TypeScript, and Rust.
+
+Requirements:
+
+- Bun
+- Rust stable
+- Tauri 2 platform prerequisites
 
 ```bash
 bun install
@@ -41,7 +51,7 @@ cargo test
 
 GitHub Actions builds installers for macOS, Linux, and Windows.
 
-- Pushes to `main`, pull requests, and manual workflow runs upload package artifacts.
+- Pushes to `main` and manual workflow runs upload package artifacts.
 - Tags matching `v*`, for example `v0.1.0`, also create a draft GitHub Release with the generated installers attached.
 
 Create a release build:
@@ -81,6 +91,10 @@ CronBox can generate local task scripts for Codex and Claude Code. By default th
 
 The workspace includes `AGENTS.md` and `CLAUDE.md` so you can keep durable rules for scheduled coding-agent tasks.
 
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Please report security issues through the private channel described in [SECURITY.md](SECURITY.md).
+
 ## License
 
-Private project.
+MIT. See [LICENSE](LICENSE).

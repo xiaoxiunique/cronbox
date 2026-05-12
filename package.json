@@ -1,8 +1,16 @@
 {
   "name": "cronbox",
-  "private": true,
   "version": "0.1.0",
   "description": "Local-first menu bar scheduler for scripts and coding-agent tasks.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xiaoxiunique/cronbox.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xiaoxiunique/cronbox/issues"
+  },
+  "homepage": "https://github.com/xiaoxiunique/cronbox#readme",
   "type": "module",
   "scripts": {
     "dev": "vite",

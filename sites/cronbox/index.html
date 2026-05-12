@@ -1,0 +1,831 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CronBox - Local-first script scheduler</title>
+    <meta
+      name="description"
+      content="CronBox is a local-first menu bar scheduler for scripts, cron jobs, and coding-agent tasks."
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        --ink: #f6f0e8;
+        --muted: #b8b1a8;
+        --quiet: #7f7a73;
+        --paper: #161412;
+        --panel: rgba(33, 30, 27, 0.72);
+        --panel-strong: rgba(48, 43, 38, 0.82);
+        --line: rgba(255, 255, 255, 0.14);
+        --line-strong: rgba(255, 255, 255, 0.24);
+        --amber: #f4b84a;
+        --mint: #6fe3b1;
+        --blue: #75a7ff;
+        --red: #ff7c66;
+        --shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 18% 12%, rgba(244, 184, 74, 0.18), transparent 28rem),
+          radial-gradient(circle at 88% 18%, rgba(111, 227, 177, 0.13), transparent 26rem),
+          linear-gradient(135deg, #100f0e 0%, #1b1713 46%, #111827 100%);
+        color: var(--ink);
+        font-family:
+          ui-sans-serif,
+          "Avenir Next",
+          "Segoe UI",
+          Helvetica,
+          sans-serif;
+        letter-spacing: 0;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.16;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+        background-size: 48px 48px;
+        mask-image: linear-gradient(to bottom, #000, transparent 72%);
+      }
+
+      body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.14;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 240 240' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='.52'/%3E%3C/svg%3E");
+        mix-blend-mode: soft-light;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .shell {
+        position: relative;
+        z-index: 1;
+        width: min(1180px, calc(100% - 40px));
+        margin: 0 auto;
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 22px 0 12px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 760;
+      }
+
+      .mark {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background:
+          linear-gradient(160deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.04)),
+          rgba(244, 184, 74, 0.14);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        backdrop-filter: blur(18px);
+      }
+
+      .nav-links a {
+        padding: 8px 13px;
+        border-radius: 999px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .nav-links a:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--ink);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(360px, 0.86fr);
+        gap: 38px;
+        align-items: center;
+        min-height: calc(100vh - 74px);
+        padding: 34px 0 72px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        width: fit-content;
+        margin-bottom: 22px;
+        padding: 7px 11px;
+        border: 1px solid rgba(244, 184, 74, 0.34);
+        border-radius: 999px;
+        background: rgba(244, 184, 74, 0.1);
+        color: #f7d99c;
+        font-size: 13px;
+      }
+
+      .pulse {
+        width: 8px;
+        height: 8px;
+        border-radius: 99px;
+        background: var(--mint);
+        box-shadow: 0 0 0 5px rgba(111, 227, 177, 0.12);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        max-width: 760px;
+        font-family:
+          "Iowan Old Style",
+          "Palatino Linotype",
+          Georgia,
+          serif;
+        font-size: clamp(52px, 8vw, 112px);
+        line-height: 0.92;
+        font-weight: 650;
+        letter-spacing: 0;
+      }
+
+      .hero-copy {
+        max-width: 650px;
+        margin-top: 24px;
+        color: var(--muted);
+        font-size: clamp(18px, 2vw, 23px);
+        line-height: 1.48;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 32px;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        padding: 0 18px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--ink);
+        font-weight: 720;
+        backdrop-filter: blur(18px);
+        transition:
+          transform 160ms ease,
+          border-color 160ms ease,
+          background 160ms ease;
+      }
+
+      .button:hover {
+        transform: translateY(-2px);
+        border-color: var(--line-strong);
+        background: rgba(255, 255, 255, 0.13);
+      }
+
+      .button.primary {
+        border-color: rgba(244, 184, 74, 0.62);
+        background: linear-gradient(180deg, #ffc95c, #d98f24);
+        color: #1b1307;
+        box-shadow: 0 18px 50px rgba(244, 184, 74, 0.18);
+      }
+
+      .hero-panel {
+        position: relative;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background:
+          linear-gradient(155deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04)),
+          var(--panel);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(26px);
+        overflow: hidden;
+      }
+
+      .hero-panel::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+        background: linear-gradient(110deg, rgba(255, 255, 255, 0.22), transparent 38%);
+        opacity: 0.55;
+      }
+
+      .window-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 13px 14px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .traffic {
+        display: flex;
+        gap: 7px;
+      }
+
+      .traffic span {
+        width: 10px;
+        height: 10px;
+        border-radius: 99px;
+        background: var(--quiet);
+      }
+
+      .traffic span:nth-child(1) {
+        background: var(--red);
+      }
+
+      .traffic span:nth-child(2) {
+        background: var(--amber);
+      }
+
+      .traffic span:nth-child(3) {
+        background: var(--mint);
+      }
+
+      .window-title {
+        color: var(--muted);
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 12px;
+      }
+
+      .scheduler {
+        display: grid;
+        gap: 12px;
+        padding: 14px;
+      }
+
+      .job-row {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 12px;
+        align-items: center;
+        padding: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.11);
+        border-radius: 8px;
+        background: rgba(9, 8, 7, 0.32);
+      }
+
+      .logo {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        color: #17120c;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-weight: 850;
+      }
+
+      .logo.py {
+        background: #ffd166;
+      }
+
+      .logo.sh {
+        background: #6fe3b1;
+      }
+
+      .logo.ai {
+        background: #75a7ff;
+      }
+
+      .job-name {
+        font-weight: 760;
+      }
+
+      .job-meta {
+        margin-top: 4px;
+        color: var(--quiet);
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 12px;
+      }
+
+      .badge {
+        padding: 5px 8px;
+        border-radius: 999px;
+        background: rgba(111, 227, 177, 0.12);
+        color: #adf5d7;
+        font-size: 12px;
+      }
+
+      .log {
+        margin: 2px 14px 14px;
+        padding: 14px;
+        border: 1px solid rgba(111, 227, 177, 0.18);
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.34);
+        color: #b8ead7;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 12px;
+        line-height: 1.65;
+      }
+
+      .section {
+        padding: 78px 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .section-head {
+        display: grid;
+        grid-template-columns: minmax(0, 0.88fr) minmax(280px, 0.56fr);
+        gap: 28px;
+        align-items: end;
+        margin-bottom: 28px;
+      }
+
+      h2 {
+        font-family:
+          "Iowan Old Style",
+          "Palatino Linotype",
+          Georgia,
+          serif;
+        font-size: clamp(34px, 4vw, 58px);
+        line-height: 1;
+        font-weight: 620;
+        letter-spacing: 0;
+      }
+
+      .section-head p {
+        color: var(--muted);
+        line-height: 1.58;
+      }
+
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .feature {
+        min-height: 210px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background:
+          linear-gradient(160deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.04)),
+          rgba(255, 255, 255, 0.04);
+        backdrop-filter: blur(22px);
+      }
+
+      .feature .num {
+        color: var(--amber);
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 12px;
+      }
+
+      .feature h3 {
+        margin-top: 46px;
+        font-size: 20px;
+        line-height: 1.15;
+      }
+
+      .feature p {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .split {
+        display: grid;
+        grid-template-columns: minmax(0, 0.84fr) minmax(360px, 1fr);
+        gap: 16px;
+        align-items: stretch;
+      }
+
+      .copy-panel,
+      .code-panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        backdrop-filter: blur(24px);
+        box-shadow: var(--shadow);
+      }
+
+      .copy-panel {
+        padding: 26px;
+      }
+
+      .copy-panel h3 {
+        font-size: 26px;
+      }
+
+      .copy-panel p {
+        margin-top: 14px;
+        color: var(--muted);
+        line-height: 1.65;
+      }
+
+      .mini-list {
+        display: grid;
+        gap: 12px;
+        margin-top: 24px;
+      }
+
+      .mini-list div {
+        padding: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .mini-list strong {
+        display: block;
+        margin-bottom: 5px;
+      }
+
+      .mini-list span {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .code-panel {
+        overflow: hidden;
+      }
+
+      .code-tabs {
+        display: flex;
+        gap: 7px;
+        padding: 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .code-tabs span {
+        padding: 6px 9px;
+        border-radius: 7px;
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      pre {
+        margin: 0;
+        padding: 20px;
+        overflow-x: auto;
+        color: #d8e9de;
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 13px;
+        line-height: 1.72;
+        white-space: pre;
+      }
+
+      .comment {
+        color: #7f9b8e;
+      }
+
+      .key {
+        color: #f4d28b;
+      }
+
+      .ok {
+        color: #93f0c5;
+      }
+
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .step {
+        padding: 20px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        min-height: 184px;
+      }
+
+      .step span {
+        display: inline-grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border: 1px solid rgba(244, 184, 74, 0.45);
+        border-radius: 8px;
+        color: var(--amber);
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+
+      .step h3 {
+        margin-top: 24px;
+        font-size: 19px;
+      }
+
+      .step p {
+        margin-top: 10px;
+        color: var(--muted);
+        line-height: 1.52;
+      }
+
+      .footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 32px 0 50px;
+        color: var(--quiet);
+        font-size: 13px;
+      }
+
+      @media (max-width: 920px) {
+        .hero,
+        .section-head,
+        .split {
+          grid-template-columns: 1fr;
+        }
+
+        .hero {
+          min-height: auto;
+          padding-top: 54px;
+        }
+
+        .feature-grid,
+        .steps {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .nav {
+          align-items: flex-start;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .shell {
+          width: min(100% - 24px, 1180px);
+        }
+
+        .nav {
+          flex-direction: column;
+        }
+
+        .nav-links {
+          width: 100%;
+          overflow-x: auto;
+          justify-content: flex-start;
+        }
+
+        h1 {
+          font-size: 52px;
+        }
+
+        .feature-grid,
+        .steps {
+          grid-template-columns: 1fr;
+        }
+
+        .job-row {
+          grid-template-columns: auto 1fr;
+        }
+
+        .badge {
+          grid-column: 2;
+          width: fit-content;
+        }
+
+        .footer {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="nav" aria-label="Primary navigation">
+        <a class="brand" href="#">
+          <span class="mark">cb</span>
+          <span>CronBox</span>
+        </a>
+        <div class="nav-links">
+          <a href="#features">Features</a>
+          <a href="#agents">Agent tasks</a>
+          <a href="#cli">CLI</a>
+          <a href="#workflow">Workflow</a>
+        </div>
+      </nav>
+
+      <main>
+        <section class="hero">
+          <div>
+            <div class="eyebrow"><span class="pulse"></span> Local scheduler for scripts that matter</div>
+            <h1>Run your cron jobs from a menu bar, not a server.</h1>
+            <p class="hero-copy">
+              CronBox watches local script folders, schedules executable entrypoints, streams logs,
+              and keeps run history beside every script. It also turns Codex and Claude prompts into
+              repeatable local jobs.
+            </p>
+            <div class="actions">
+              <a class="button primary" href="#cli">See CLI flow</a>
+              <a class="button" href="#features">Explore features</a>
+            </div>
+          </div>
+
+          <aside class="hero-panel" aria-label="CronBox interface preview">
+            <div class="window-top">
+              <div class="traffic"><span></span><span></span><span></span></div>
+              <div class="window-title">CronBox / scheduled</div>
+            </div>
+            <div class="scheduler">
+              <div class="job-row">
+                <div class="logo py">py</div>
+                <div>
+                  <div class="job-name">chain-health-report</div>
+                  <div class="job-meta">0 9 * * * · Asia/Shanghai</div>
+                </div>
+                <div class="badge">next 09:00</div>
+              </div>
+              <div class="job-row">
+                <div class="logo sh">sh</div>
+                <div>
+                  <div class="job-name">sync-indexer-cache</div>
+                  <div class="job-meta">*/15 * * * * · workspace-write</div>
+                </div>
+                <div class="badge">running</div>
+              </div>
+              <div class="job-row">
+                <div class="logo ai">ai</div>
+                <div>
+                  <div class="job-name">codex-weekly-maintenance</div>
+                  <div class="job-meta">AGENTS.md · ~/.cronbox</div>
+                </div>
+                <div class="badge">enabled</div>
+              </div>
+            </div>
+            <pre class="log">[09:00:01] start chain-health-report
+[09:00:03] loading args: {"network":"iotex"}
+[09:00:18] indexed 14,208 events
+[09:00:19] status: success · 18.4s</pre>
+          </aside>
+        </section>
+
+        <section class="section" id="features">
+          <div class="section-head">
+            <h2>Built for local operational scripts.</h2>
+            <p>
+              CronBox behaves more like a small Windmill-style control surface than a generic cron
+              editor. The primary object is the run history and the log, not decorative scheduling chrome.
+            </p>
+          </div>
+          <div class="feature-grid">
+            <article class="feature">
+              <div class="num">01</div>
+              <h3>Entrypoint scanning</h3>
+              <p>Only scripts that can actually run are surfaced when you add a directory.</p>
+            </article>
+            <article class="feature">
+              <div class="num">02</div>
+              <h3>Menu bar runtime</h3>
+              <p>Close the main window and scheduled jobs keep running from the menu bar process.</p>
+            </article>
+            <article class="feature">
+              <div class="num">03</div>
+              <h3>Live logs</h3>
+              <p>stdout and stderr stream into job history while the process is still active.</p>
+            </article>
+            <article class="feature">
+              <div class="num">04</div>
+              <h3>Skip overlap</h3>
+              <p>If the previous scheduled run is still queued or running, the next tick is skipped.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="agents">
+          <div class="split">
+            <div class="copy-panel">
+              <h3>Schedule coding agents like any other script.</h3>
+              <p>
+                CronBox can create Codex and Claude Code task scripts under a default local workspace.
+                That workspace carries durable rules files, so scheduled agent runs behave consistently.
+              </p>
+              <div class="mini-list">
+                <div>
+                  <strong>Workspace</strong>
+                  <span>Agent tasks run from <code>~/.cronbox</code> by default.</span>
+                </div>
+                <div>
+                  <strong>Rules</strong>
+                  <span><code>AGENTS.md</code> and <code>CLAUDE.md</code> live beside the generated tasks.</span>
+                </div>
+                <div>
+                  <strong>History</strong>
+                  <span>Each run keeps metadata, inputs, output, error, duration, and logs together.</span>
+                </div>
+              </div>
+            </div>
+            <div class="code-panel">
+              <div class="code-tabs"><span>codex task</span><span>claude task</span><span>logs</span></div>
+              <pre><span class="comment"># Generated by CronBox</span>
+cd ~/.cronbox
+
+<span class="key">codex</span> exec \
+  -C ~/.cronbox \
+  --sandbox workspace-write \
+  --skip-git-repo-check -
+
+<span class="comment"># Later in the log pane</span>
+<span class="ok">SUCCESS</span> · completed in 2m 07s</pre>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="cli">
+          <div class="section-head">
+            <h2>Manage it from the app or terminal.</h2>
+            <p>
+              The desktop app installs a companion <code>cronbox</code> command when possible, so local
+              automation can be scripted without opening the UI.
+            </p>
+          </div>
+          <div class="code-panel">
+            <div class="code-tabs"><span>terminal</span></div>
+            <pre>cronbox add ~/scripts
+cronbox scripts list
+cronbox schedules add ./daily-report.sh "0 9 * * *" --tz Asia/Shanghai
+cronbox jobs list
+cronbox run ~/scripts daily-report.sh --args '{"date":"today"}'</pre>
+          </div>
+        </section>
+
+        <section class="section" id="workflow">
+          <div class="section-head">
+            <h2>A compact loop for recurring local work.</h2>
+            <p>
+              CronBox keeps the operational path short: scan, schedule, watch logs, inspect history,
+              adjust, repeat.
+            </p>
+          </div>
+          <div class="steps">
+            <article class="step">
+              <span>1</span>
+              <h3>Add a directory</h3>
+              <p>Point CronBox at a script folder. Non-runnable files stay out of the list.</p>
+            </article>
+            <article class="step">
+              <span>2</span>
+              <h3>Configure one dialog</h3>
+              <p>Edit alias, cron expression, timezone, args, and enabled state in one place.</p>
+            </article>
+            <article class="step">
+              <span>3</span>
+              <h3>Read the log</h3>
+              <p>Use the detail view as the source of truth for inputs, history, result, and output.</p>
+            </article>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <span>CronBox · local-first scheduling for scripts and agent tasks</span>
+        <span>Tauri 2 · Vue 3 · Rust · Cloudflare Pages ready</span>
+      </footer>
+    </div>
+  </body>
+</html>
