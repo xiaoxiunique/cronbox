@@ -65,6 +65,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            commands::dashboard_stats,
             commands::list_work_dirs,
             commands::add_work_dir,
             commands::add_work_dir_with_scan,

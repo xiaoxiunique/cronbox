@@ -3,6 +3,7 @@ import { useRoute } from "vue-router";
 const route = useRoute();
 
 const tabs = [
+  { path: "/", label: "Home", icon: "⌂" },
   { path: "/scripts", label: "Scripts", icon: "📄" },
   { path: "/schedules", label: "Schedules", icon: "⏰" },
   { path: "/history", label: "History", icon: "📋" },

@@ -201,6 +201,34 @@ pub struct Job {
     pub created_at: String,
 }
 
+// ── Dashboard statistics ──
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RecentRunStats {
+    pub total: u32,
+    pub success: u32,
+    pub failure: u32,
+    pub running: u32,
+    pub queued: u32,
+    pub cancelled: u32,
+    pub skipped: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduleDistributionBucket {
+    pub hour: String,
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DashboardStats {
+    pub script_total: u32,
+    pub schedule_total: u32,
+    pub enabled_schedule_total: u32,
+    pub recent_runs: RecentRunStats,
+    pub schedule_distribution: Vec<ScheduleDistributionBucket>,
+}
+
 // ── Execution result ──
 
 #[derive(Debug, Clone)]

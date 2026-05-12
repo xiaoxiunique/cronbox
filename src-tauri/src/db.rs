@@ -447,6 +447,32 @@ impl Database {
         )?;
         Ok(count)
     }
+
+    pub fn recent_run_stats_since(&self, since: &str) -> SqlResult<RecentRunStats> {
+        let mut stats = RecentRunStats::default();
+        let mut stmt = self
+            .conn
+            .prepare("SELECT status, COUNT(*) FROM jobs WHERE created_at >= ?1 GROUP BY status")?;
+        let rows = stmt.query_map(params![since], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u32))
+        })?;
+
+        for row in rows {
+            let (status, count) = row?;
+            stats.total += count;
+            match JobStatus::from_str(&status) {
+                Some(JobStatus::Success) => stats.success += count,
+                Some(JobStatus::Failure) => stats.failure += count,
+                Some(JobStatus::Running) => stats.running += count,
+                Some(JobStatus::Queued) => stats.queued += count,
+                Some(JobStatus::Cancelled) => stats.cancelled += count,
+                Some(JobStatus::Skipped) => stats.skipped += count,
+                None => {}
+            }
+        }
+
+        Ok(stats)
+    }
 }
 
 fn row_to_schedule(row: &rusqlite::Row) -> SqlResult<Schedule> {
@@ -622,5 +648,26 @@ mod tests {
         assert_eq!(jobs.len(), 1);
         assert_eq!(jobs[0].script_path, "a.sh");
         assert_eq!(jobs[0].base_dir, "/tmp/one");
+    }
+
+    #[test]
+    fn test_recent_run_stats_since() {
+        let db = Database::open_in_memory().unwrap();
+        let success = db.create_job(None, "ok.sh", "/tmp", "{}", None).unwrap();
+        db.mark_job_completed(&success.id, true, None, "", None, 10)
+            .unwrap();
+
+        let failure = db.create_job(None, "bad.sh", "/tmp", "{}", None).unwrap();
+        db.mark_job_completed(&failure.id, false, None, "", Some("boom"), 10)
+            .unwrap();
+
+        let running = db.create_job(None, "run.sh", "/tmp", "{}", None).unwrap();
+        db.mark_job_running(&running.id).unwrap();
+
+        let stats = db.recent_run_stats_since("1970-01-01T00:00:00Z").unwrap();
+        assert_eq!(stats.total, 3);
+        assert_eq!(stats.success, 1);
+        assert_eq!(stats.failure, 1);
+        assert_eq!(stats.running, 1);
     }
 }

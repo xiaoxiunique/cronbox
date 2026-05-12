@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+use chrono::{DateTime, Timelike, Utc};
 use tauri::State;
 
 use crate::cli;
@@ -10,6 +12,58 @@ use crate::scheduler;
 use crate::state::AppState;
 
 type CmdResult<T> = Result<T, String>;
+
+#[tauri::command]
+pub fn dashboard_stats(state: State<AppState>) -> CmdResult<DashboardStats> {
+    let script_total = state.scan_scripts().len() as u32;
+
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let schedules = db.list_schedules().map_err(|e| e.to_string())?;
+    let since = (Utc::now() - chrono::Duration::hours(24)).to_rfc3339();
+    let recent_runs = db
+        .recent_run_stats_since(&since)
+        .map_err(|e| e.to_string())?;
+
+    Ok(DashboardStats {
+        script_total,
+        schedule_total: schedules.len() as u32,
+        enabled_schedule_total: schedules.iter().filter(|schedule| schedule.enabled).count() as u32,
+        recent_runs,
+        schedule_distribution: schedule_distribution(&schedules),
+    })
+}
+
+fn schedule_distribution(schedules: &[Schedule]) -> Vec<ScheduleDistributionBucket> {
+    let mut buckets = [0u32; 24];
+
+    for schedule in schedules.iter().filter(|schedule| schedule.enabled) {
+        let next_run = schedule.next_run_at.clone().or_else(|| {
+            scheduler::calculate_next_run(&schedule.cron_expr, &schedule.timezone).ok()
+        });
+        let Some(next_run) = next_run else {
+            continue;
+        };
+        let Ok(next_run) = DateTime::parse_from_rfc3339(&next_run) else {
+            continue;
+        };
+
+        let hour = schedule
+            .timezone
+            .parse::<chrono_tz::Tz>()
+            .map(|tz| next_run.with_timezone(&tz).hour())
+            .unwrap_or_else(|_| next_run.with_timezone(&Utc).hour());
+        buckets[hour as usize] += 1;
+    }
+
+    buckets
+        .iter()
+        .enumerate()
+        .map(|(hour, count)| ScheduleDistributionBucket {
+            hour: format!("{hour:02}:00"),
+            count: *count,
+        })
+        .collect()
+}
 
 // ── Work Dirs ──
 

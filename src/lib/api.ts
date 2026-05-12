@@ -55,6 +55,29 @@ export interface Job {
   created_at: string;
 }
 
+export interface RecentRunStats {
+  total: number;
+  success: number;
+  failure: number;
+  running: number;
+  queued: number;
+  cancelled: number;
+  skipped: number;
+}
+
+export interface ScheduleDistributionBucket {
+  hour: string;
+  count: number;
+}
+
+export interface DashboardStats {
+  script_total: number;
+  schedule_total: number;
+  enabled_schedule_total: number;
+  recent_runs: RecentRunStats;
+  schedule_distribution: ScheduleDistributionBucket[];
+}
+
 export interface ScriptParam {
   name: string;
   param_type: string;
@@ -65,6 +88,8 @@ export interface ScriptParam {
 }
 
 export const api = {
+  dashboardStats: () => invoke<DashboardStats>("dashboard_stats"),
+
   // Work dirs
   listWorkDirs: () => invoke<WorkDir[]>("list_work_dirs"),
   addWorkDir: (path: string) => invoke<WorkDir>("add_work_dir", { path }),
