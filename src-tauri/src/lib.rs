@@ -93,8 +93,15 @@ pub fn run() {
             commands::upcoming_runs,
             commands::detect_args,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running CronBox");
+        .build(tauri::generate_context!())
+        .expect("error while building CronBox")
+        .run(|_, event| {
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+                if code.is_none() {
+                    api.prevent_exit();
+                }
+            }
+        });
 }
 
 fn configure_menu_bar_runtime(app: &mut tauri::App) {

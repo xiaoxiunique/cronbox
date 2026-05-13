@@ -11,6 +11,7 @@ use crate::models::{Job, Schedule};
 /// Set up the system tray icon with initial menu
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let tray_menu = build_tray_menu(app, &[], &[])?;
+    app.manage(TrayMenuState::default());
 
     TrayIconBuilder::with_id("main")
         .icon(app.default_window_icon().cloned().unwrap())
@@ -31,32 +32,16 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn show_main_window(app: &AppHandle) {
-    #[cfg(target_os = "macos")]
-    {
-        if let Err(err) = app.set_activation_policy(tauri::ActivationPolicy::Accessory) {
-            eprintln!("cronbox tray show: failed to set activation policy: {err}");
-        }
-        if let Err(err) = app.set_dock_visibility(false) {
-            eprintln!("cronbox tray show: failed to hide dock icon: {err}");
-        }
-    }
-
     let Some(window) = app.get_webview_window("main") else {
         eprintln!("cronbox tray show: main window not found");
         return;
     };
 
-    if let Err(err) = window.unminimize() {
-        eprintln!("cronbox tray show: failed to unminimize main window: {err}");
-    }
     if let Err(err) = window.show() {
         eprintln!("cronbox tray show: failed to show main window: {err}");
     }
-    if let Err(err) = window.set_always_on_top(true) {
-        eprintln!("cronbox tray show: failed to raise main window: {err}");
-    }
-    if let Err(err) = window.set_always_on_top(false) {
-        eprintln!("cronbox tray show: failed to restore main window z-order: {err}");
+    if let Err(err) = window.unminimize() {
+        eprintln!("cronbox tray show: failed to unminimize main window: {err}");
     }
     if let Err(err) = window.set_focus() {
         eprintln!("cronbox tray show: failed to focus main window: {err}");
@@ -76,21 +61,56 @@ pub fn refresh_tray(app: &AppHandle, db: &Arc<Mutex<Database>>) {
         })
         .unwrap_or_default();
 
-    if let Ok(menu) = build_tray_menu(app, &schedules, &running) {
-        // Update all tray icons with new menu
-        for tray in app.tray_by_id("main").into_iter() {
-            let _ = tray.set_menu(Some(menu.clone()));
+    let signature = tray_signature(&schedules, &running);
+    if let Some(state) = app.try_state::<TrayMenuState>() {
+        if let Ok(last_signature) = state.last_signature.lock() {
+            if *last_signature == signature {
+                return;
+            }
         }
-        // If there's a default tray (first one)
-        if let Some(trays) = app.try_state::<TrayState>() {
-            // Already handled above
-            let _ = trays;
+    }
+
+    if let Ok(menu) = build_tray_menu(app, &schedules, &running) {
+        if let Some(tray) = app.tray_by_id("main") {
+            if tray.set_menu(Some(menu)).is_ok() {
+                if let Some(state) = app.try_state::<TrayMenuState>() {
+                    if let Ok(mut last_signature) = state.last_signature.lock() {
+                        *last_signature = signature;
+                    }
+                }
+            }
         }
     }
 }
 
-// Dummy type so the compiler doesn't complain — we use tray_by_id instead
-struct TrayState;
+#[derive(Default)]
+struct TrayMenuState {
+    last_signature: Mutex<String>,
+}
+
+fn tray_signature(schedules: &[Schedule], running_jobs: &[Job]) -> String {
+    let mut value = String::new();
+    for schedule in schedules {
+        value.push_str(&schedule.id);
+        value.push('|');
+        value.push_str(&schedule.script_path);
+        value.push('|');
+        value.push_str(&schedule.cron_expr);
+        value.push('|');
+        value.push_str(if schedule.enabled { "1" } else { "0" });
+        value.push('\n');
+    }
+    value.push_str("--running--\n");
+    for job in running_jobs {
+        value.push_str(&job.id);
+        value.push('|');
+        value.push_str(&job.script_path);
+        value.push('|');
+        value.push_str(&format!("{:?}", job.status));
+        value.push('\n');
+    }
+    value
+}
 
 fn build_tray_menu(
     app: &AppHandle,
