@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 export interface WorkDir {
   id: string;
   path: string;
+  scan_mode: string;
   created_at: string;
 }
 
@@ -94,6 +95,10 @@ export const api = {
   listWorkDirs: () => invoke<WorkDir[]>("list_work_dirs"),
   addWorkDir: (path: string) => invoke<WorkDir>("add_work_dir", { path }),
   addWorkDirWithScan: (path: string) => invoke<AddedWorkDir>("add_work_dir_with_scan", { path }),
+  previewScriptEntries: (path: string) => invoke<ScriptFile[]>("preview_script_entries", { path }),
+  addSelectedScripts: (baseDir: string, scriptPaths: string[]) =>
+    invoke<AddedWorkDir>("add_selected_scripts", { baseDir, scriptPaths }),
+  addScriptFile: (path: string) => invoke<AddedWorkDir>("add_script_file", { path }),
   removeWorkDir: (id: string) => invoke<boolean>("remove_work_dir", { id }),
 
   scanScripts: () => invoke<ScriptFile[]>("scan_scripts"),

@@ -9,7 +9,7 @@ use crate::models::{
     ExecutionResult, Job, JobStatus, Schedule, ScriptFile, ScriptLanguage, WorkDir,
 };
 use crate::scheduler;
-use crate::state::AppState;
+use crate::state::{scan_directory_entries, script_from_file, AppState};
 
 pub fn default_db_path() -> PathBuf {
     dirs_next::data_dir()
@@ -123,37 +123,125 @@ fn run_scripts(args: &[String]) -> Result<i32, String> {
 }
 
 fn run_add(args: &[String]) -> Result<i32, String> {
-    let path = args.first().ok_or("usage: cronbox add <directory>")?;
-    if args.len() > 1 {
-        return Err("usage: cronbox add <directory>".to_string());
+    let add = parse_cli_add_args(args)?;
+
+    let path_buf = PathBuf::from(&add.path);
+    if path_buf.is_file() {
+        if add.all || !add.includes.is_empty() {
+            return Err("usage: cronbox add <script-file>".to_string());
+        }
+        return add_script_file_from_cli(&path_buf);
     }
 
-    let path_buf = PathBuf::from(path);
     if !path_buf.is_dir() {
-        return Err(format!("not a directory: {path}"));
+        return Err(format!("not found: {}", add.path));
     }
 
     let canonical_path = fs::canonicalize(&path_buf)
         .map_err(|e| format!("cannot resolve directory {}: {e}", path_buf.display()))?;
     let canonical_path = canonical_path.to_string_lossy().to_string();
+
+    let candidates = scan_directory_entries(Path::new(&canonical_path));
+    if candidates.is_empty() {
+        println!("No entry scripts found.");
+        return Ok(0);
+    }
+
+    if !add.all && add.includes.is_empty() {
+        println!("Entry scripts found:");
+        print_scripts(&candidates);
+        println!();
+        println!(
+            "No scripts were added. Use `cronbox add <directory> --include <script>` or --all."
+        );
+        return Ok(0);
+    }
+
+    let selected = if add.all {
+        candidates
+    } else {
+        let mut selected = Vec::new();
+        for include in &add.includes {
+            let Some(script) = candidates.iter().find(|script| script.path == *include) else {
+                return Err(format!("script is not an executable entrypoint: {include}"));
+            };
+            selected.push(script.clone());
+        }
+        selected
+    };
+
     let db = open_db()?;
     let dir = db
-        .add_work_dir(&canonical_path)
+        .add_work_dir_manual(&canonical_path)
         .map_err(|e| e.to_string())?;
     println!("added directory: {} {}", short_id(&dir.id), dir.path);
-
-    let state = AppState::new(default_db_path())?;
-    let scripts: Vec<ScriptFile> = state
-        .scan_scripts()
-        .into_iter()
-        .filter(|script| script.base_dir == dir.path)
-        .collect();
-    if scripts.is_empty() {
-        println!("No entry scripts found.");
-    } else {
-        println!("Entry scripts:");
-        print_scripts(&scripts);
+    for script in &selected {
+        db.add_script_entry(&dir.path, &script.path)
+            .map_err(|e| e.to_string())?;
     }
+    println!("Added scripts:");
+    print_scripts(&selected);
+    Ok(0)
+}
+
+struct CliAddArgs {
+    path: String,
+    all: bool,
+    includes: Vec<String>,
+}
+
+fn parse_cli_add_args(args: &[String]) -> Result<CliAddArgs, String> {
+    let mut path = None;
+    let mut all = false;
+    let mut includes = Vec::new();
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--all" => all = true,
+            "--include" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or("--include requires a relative script path")?;
+                includes.push(value.clone());
+            }
+            value if value.starts_with("--") => {
+                return Err(format!("unknown add option: {value}"));
+            }
+            value => {
+                if path.is_some() {
+                    return Err(
+                        "usage: cronbox add <script-file>\n       cronbox add <directory> [--include SCRIPT] [--all]"
+                            .to_string(),
+                    );
+                }
+                path = Some(value.to_string());
+            }
+        }
+        i += 1;
+    }
+
+    Ok(CliAddArgs {
+        path: path.ok_or(
+            "usage: cronbox add <script-file>\n       cronbox add <directory> [--include SCRIPT] [--all]",
+        )?,
+        all,
+        includes,
+    })
+}
+
+fn add_script_file_from_cli(path: &Path) -> Result<i32, String> {
+    let script = script_from_file(path)
+        .ok_or_else(|| format!("file is not an executable entry script: {}", path.display()))?;
+    let db = open_db()?;
+    let dir = db
+        .add_work_dir_manual(&script.base_dir)
+        .map_err(|e| e.to_string())?;
+    db.add_script_entry(&dir.path, &script.path)
+        .map_err(|e| e.to_string())?;
+    println!("added script:");
+    print_scripts(&[script]);
     Ok(0)
 }
 
@@ -703,7 +791,8 @@ fn print_help() {
 
 Usage:
   cronbox help
-  cronbox add <directory>
+  cronbox add <script-file>
+  cronbox add <directory> [--include SCRIPT] [--all]
   cronbox install-cli [--target PATH] [--force]
   cronbox cli-status
 
@@ -732,8 +821,11 @@ Notes:
   CronBox is a local-first menu-bar scheduler for scripts and coding-agent tasks.
   The CLI shares the same local data as the desktop app, but it does not open or
   control the UI.
-  Start with `cronbox add <directory>` to register a scripts directory. CronBox
-  scans the directory and only lists files with executable entrypoints.
+  Start with `cronbox add <script-file>` to register one script, or
+  `cronbox add <directory>` to preview entry scripts in a directory.
+  Directory adds are selective by default: use --include relative/path.py to
+  add one candidate, repeat --include for several, or use --all for script
+  library directories where every entrypoint should be registered.
   Then use `cronbox scripts list` to inspect discovered scripts, and
   `cronbox schedules add <script-file> <cron> [--dir DIR]` to schedule one.
   Quote cron expressions, for example: "0 * * * *"

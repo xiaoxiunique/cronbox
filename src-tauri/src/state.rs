@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -25,26 +25,52 @@ impl AppState {
         })
     }
 
-    /// Scan all registered work_dirs for scripts
+    /// Scan all registered sources for scripts.
     pub fn scan_scripts(&self) -> Vec<ScriptFile> {
-        let (dirs, aliases) = {
+        let (dirs, entries, aliases) = {
             let db = self.db.lock().unwrap();
             let dirs = db.list_work_dirs().unwrap_or_default();
+            let entries = db.list_script_entries().unwrap_or_default();
             let aliases = db
                 .list_script_aliases()
                 .unwrap_or_default()
                 .into_iter()
                 .map(|alias| ((alias.base_dir, alias.script_path), alias.alias))
                 .collect::<HashMap<_, _>>();
-            (dirs, aliases)
+            (dirs, entries, aliases)
         };
+
+        let explicit_entries = entries
+            .iter()
+            .map(|entry| (entry.base_dir.clone(), entry.script_path.clone()))
+            .collect::<HashSet<_>>();
+
         let mut all = Vec::new();
         for wd in &dirs {
             let base = Path::new(&wd.path);
+            if !base.is_dir() {
+                continue;
+            }
+            if wd.scan_mode == "manual" {
+                continue;
+            }
+            if explicit_entries
+                .iter()
+                .any(|(base_dir, _)| base_dir == &wd.path)
+            {
+                continue;
+            }
             if base.is_dir() {
                 scan_recursive(base, base, &wd.path, &mut all);
             }
         }
+
+        for entry in &entries {
+            if let Some(script) = script_from_relative_path(&entry.base_dir, &entry.script_path) {
+                all.push(script);
+            }
+        }
+
         for script in &mut all {
             script.alias = aliases
                 .get(&(script.base_dir.clone(), script.path.clone()))
@@ -52,8 +78,40 @@ impl AppState {
                 .unwrap_or_else(|| default_script_alias(&script.name));
         }
         all.sort_by(|a, b| (&a.base_dir, &a.path).cmp(&(&b.base_dir, &b.path)));
+        all.dedup_by(|a, b| a.base_dir == b.base_dir && a.path == b.path);
         all
     }
+}
+
+pub fn scan_directory_entries(base_dir: &Path) -> Vec<ScriptFile> {
+    let Ok(canonical_base) = std::fs::canonicalize(base_dir) else {
+        return Vec::new();
+    };
+    let base_dir_str = canonical_base.to_string_lossy().to_string();
+    let mut scripts = Vec::new();
+    scan_recursive(
+        &canonical_base,
+        &canonical_base,
+        &base_dir_str,
+        &mut scripts,
+    );
+    for script in &mut scripts {
+        script.alias = default_script_alias(&script.name);
+    }
+    scripts.sort_by(|a, b| a.path.cmp(&b.path));
+    scripts
+}
+
+pub fn script_from_file(path: &Path) -> Option<ScriptFile> {
+    let canonical_path = std::fs::canonicalize(path).ok()?;
+    let base_dir = canonical_path.parent()?;
+    let script_path = canonical_path.file_name()?.to_string_lossy().to_string();
+    script_from_paths(base_dir, &canonical_path, &script_path)
+}
+
+fn script_from_relative_path(base_dir: &str, script_path: &str) -> Option<ScriptFile> {
+    let full = Path::new(base_dir).join(script_path);
+    script_from_paths(Path::new(base_dir), &full, script_path)
 }
 
 fn scan_recursive(base: &Path, dir: &Path, base_dir_str: &str, scripts: &mut Vec<ScriptFile>) {
@@ -82,20 +140,30 @@ fn scan_recursive(base: &Path, dir: &Path, base_dir_str: &str, scripts: &mut Vec
                 continue;
             }
             let relative = path.strip_prefix(base).unwrap_or(&path);
-            let name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("")
-                .to_string();
-            scripts.push(ScriptFile {
-                path: relative.display().to_string(),
-                name,
-                alias: String::new(),
-                language,
-                base_dir: base_dir_str.to_string(),
-            });
+            if let Some(script) = script_from_paths(base, &path, &relative.to_string_lossy()) {
+                scripts.push(ScriptFile {
+                    base_dir: base_dir_str.to_string(),
+                    ..script
+                });
+            }
         }
     }
+}
+
+fn script_from_paths(base_dir: &Path, full_path: &Path, script_path: &str) -> Option<ScriptFile> {
+    let language = ScriptLanguage::from_extension(full_path.to_str()?)?;
+    if !is_entry_script(full_path, language) {
+        return None;
+    }
+    let name = full_path.file_name()?.to_string_lossy().to_string();
+    let alias = default_script_alias(&name);
+    Some(ScriptFile {
+        path: script_path.to_string(),
+        name,
+        alias,
+        language,
+        base_dir: base_dir.to_string_lossy().to_string(),
+    })
 }
 
 pub fn default_script_alias(name: &str) -> String {

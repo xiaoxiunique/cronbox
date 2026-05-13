@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
-import { api, type WorkDir } from "../lib/api";
+import { computed, ref, onMounted } from "vue";
+import { api, type ScriptFile, type WorkDir } from "../lib/api";
 import { open } from "@tauri-apps/plugin-dialog";
+import LanguageLogo from "../components/LanguageLogo.vue";
 
 const workDirs = ref<WorkDir[]>([]);
 const cliStatus = ref("");
+const showPicker = ref(false);
+const pickerBaseDir = ref("");
+const pickerScripts = ref<ScriptFile[]>([]);
+const selectedPaths = ref<Set<string>>(new Set());
+const savingPicker = ref(false);
+
+const selectedCount = computed(() => selectedPaths.value.size);
 
 async function load() {
   workDirs.value = await api.listWorkDirs();
@@ -15,15 +23,74 @@ async function addDir() {
   try {
     const selected = await open({ directory: true, multiple: false });
     if (selected) {
-      const added = await api.addWorkDirWithScan(selected as string);
-      await load();
-      if (added.entry_scripts.length === 0) {
-        alert("Directory added, but no executable entry scripts were found.");
+      const path = selected as string;
+      const scripts = await api.previewScriptEntries(path);
+      if (scripts.length === 0) {
+        alert("No executable entry scripts were found.");
+        return;
       }
+      pickerBaseDir.value = path;
+      pickerScripts.value = scripts;
+      selectedPaths.value = new Set(scripts.map((script) => script.path));
+      showPicker.value = true;
     }
   } catch (e: any) {
     console.error("addDir error:", e);
     alert("Failed: " + e);
+  }
+}
+
+async function addFile() {
+  try {
+    const selected = await open({
+      directory: false,
+      multiple: false,
+      filters: [{ name: "Scripts", extensions: ["py", "sh", "bash", "ts", "js", "mts", "mjs", "sql"] }],
+    });
+    if (!selected) return;
+    const added = await api.addScriptFile(selected as string);
+    await load();
+    if (added.entry_scripts.length === 0) {
+      alert("No script was added.");
+    }
+  } catch (e: any) {
+    console.error("addFile error:", e);
+    alert("Failed: " + e);
+  }
+}
+
+function toggleScript(path: string, checked: boolean) {
+  const next = new Set(selectedPaths.value);
+  if (checked) {
+    next.add(path);
+  } else {
+    next.delete(path);
+  }
+  selectedPaths.value = next;
+}
+
+function selectAllScripts() {
+  selectedPaths.value = new Set(pickerScripts.value.map((script) => script.path));
+}
+
+function clearSelectedScripts() {
+  selectedPaths.value = new Set();
+}
+
+async function saveSelectedScripts() {
+  if (selectedPaths.value.size === 0) {
+    alert("Select at least one script.");
+    return;
+  }
+  savingPicker.value = true;
+  try {
+    await api.addSelectedScripts(pickerBaseDir.value, Array.from(selectedPaths.value));
+    showPicker.value = false;
+    await load();
+  } catch (e: any) {
+    alert("Failed: " + e);
+  } finally {
+    savingPicker.value = false;
   }
 }
 
@@ -59,12 +126,16 @@ onMounted(load);
       <div class="card">
         <div v-if="workDirs.length === 0" class="empty-dirs">No directories added yet</div>
         <div v-for="wd in workDirs" :key="wd.id" class="dir-row">
-          <span class="dir-icon">📁</span>
+          <span class="dir-icon">{{ wd.scan_mode === "manual" ? "☑" : "📁" }}</span>
           <span class="dir-path">{{ wd.path }}</span>
+          <span class="dir-mode">{{ wd.scan_mode }}</span>
           <button @click="removeDir(wd.id)" class="btn-icon del" title="Remove">✕</button>
         </div>
-        <button @click="addDir" class="btn add-btn">+ Add Directory</button>
-        <div class="hint">CronBox scans these directories for .py .sh .ts .js .sql files</div>
+        <div class="source-actions">
+          <button @click="addFile" class="btn add-btn">+ Add Script</button>
+          <button @click="addDir" class="btn">+ Add Directory</button>
+        </div>
+        <div class="hint">Add a single script file, or scan a directory and choose which entry scripts to include.</div>
       </div>
     </div>
 
@@ -90,6 +161,48 @@ onMounted(load);
       <div class="card">
         <div>Version: 0.1.0</div>
         <div>Engine: cronbox (Rust + SQLite + Tauri 2)</div>
+      </div>
+    </div>
+
+    <div v-if="showPicker" class="overlay" @click.self="showPicker = false">
+      <div class="dialog picker-dialog">
+        <div class="dialog-head">
+          <div>
+            <h3>Select Scripts</h3>
+            <div class="picker-base">{{ pickerBaseDir }}</div>
+          </div>
+          <button @click="showPicker = false" class="btn-icon" title="Close">✕</button>
+        </div>
+
+        <div class="picker-toolbar">
+          <span>{{ selectedCount }} of {{ pickerScripts.length }} selected</span>
+          <div>
+            <button @click="selectAllScripts" class="link-btn">Select all</button>
+            <button @click="clearSelectedScripts" class="link-btn">Clear</button>
+          </div>
+        </div>
+
+        <div class="script-picker-list">
+          <label v-for="script in pickerScripts" :key="script.path" class="script-pick-row">
+            <input
+              type="checkbox"
+              :checked="selectedPaths.has(script.path)"
+              @change="toggleScript(script.path, ($event.target as HTMLInputElement).checked)"
+            />
+            <LanguageLogo :language="script.language" />
+            <span class="pick-text">
+              <span class="pick-name">{{ script.alias }}</span>
+              <span class="pick-path">{{ script.path }}</span>
+            </span>
+          </label>
+        </div>
+
+        <div class="dialog-actions">
+          <button @click="showPicker = false" class="btn">Cancel</button>
+          <button @click="saveSelectedScripts" class="btn add-btn" :disabled="savingPicker || selectedCount === 0">
+            Add Selected
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -127,6 +240,19 @@ onMounted(load);
 }
 .dir-icon { font-size: 16px; }
 .dir-path { flex: 1; font-family: monospace; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dir-mode {
+  color: var(--text-secondary);
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: var(--bg-soft);
+}
+.source-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .btn-icon {
   border: 1px solid var(--border);
   background: var(--bg-soft);
@@ -173,6 +299,117 @@ onMounted(load);
   color: #fff;
   border-color: transparent;
   box-shadow: 0 12px 30px rgba(22, 119, 255, 0.30);
+}
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 14, 20, 0.28);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.dialog {
+  width: min(640px, calc(100vw - 40px));
+  max-height: 82vh;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  display: flex;
+  flex-direction: column;
+}
+.dialog-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+.dialog h3 { margin: 0; font-size: 16px; }
+.picker-base {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-family: monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.picker-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+.link-btn {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 3px 6px;
+}
+.link-btn:hover { color: var(--text); }
+.script-picker-list {
+  overflow-y: auto;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+}
+.script-pick-row {
+  display: grid;
+  grid-template-columns: 18px 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 10px;
+  cursor: pointer;
+}
+.script-pick-row:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+}
+.script-pick-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+.pick-text { min-width: 0; }
+.pick-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pick-path {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-family: monospace;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
 }
 @media (prefers-color-scheme: dark) {
   .card {

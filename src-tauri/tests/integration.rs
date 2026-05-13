@@ -154,6 +154,32 @@ mod integration_tests {
     }
 
     #[test]
+    fn test_manual_script_entries_limit_directory_scan() {
+        use cronbox_lib::state::AppState;
+
+        let dir = std::env::temp_dir().join(format!("cronbox-manual-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("wanted.sh"), "#!/bin/bash\necho wanted").unwrap();
+        std::fs::write(dir.join("other.sh"), "#!/bin/bash\necho other").unwrap();
+
+        let db_path = dir.join("test.db");
+        let state = AppState::new(db_path).unwrap();
+        {
+            let db = state.db.lock().unwrap();
+            db.add_work_dir_manual(dir.to_str().unwrap()).unwrap();
+            db.add_script_entry(dir.to_str().unwrap(), "wanted.sh")
+                .unwrap();
+        }
+
+        let scripts = state.scan_scripts();
+        assert_eq!(scripts.len(), 1);
+        assert_eq!(scripts[0].path, "wanted.sh");
+        assert_eq!(scripts[0].base_dir, dir.to_str().unwrap());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn test_full_engine_lifecycle() {
         use cronbox_lib::state::AppState;
 

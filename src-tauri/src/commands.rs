@@ -9,7 +9,7 @@ use crate::db::Database;
 use crate::executor;
 use crate::models::*;
 use crate::scheduler;
-use crate::state::AppState;
+use crate::state::{scan_directory_entries, script_from_file, AppState};
 
 type CmdResult<T> = Result<T, String>;
 
@@ -114,6 +114,81 @@ pub fn add_work_dir_with_scan(state: State<AppState>, path: String) -> CmdResult
     Ok(AddedWorkDir {
         work_dir,
         entry_scripts,
+    })
+}
+
+#[tauri::command]
+pub fn preview_script_entries(path: String) -> CmdResult<Vec<ScriptFile>> {
+    let p = PathBuf::from(&path);
+    if !p.is_dir() {
+        return Err(format!("Not a directory: {path}"));
+    }
+    Ok(scan_directory_entries(&p))
+}
+
+#[tauri::command]
+pub fn add_selected_scripts(
+    state: State<AppState>,
+    base_dir: String,
+    script_paths: Vec<String>,
+) -> CmdResult<AddedWorkDir> {
+    let base = PathBuf::from(&base_dir);
+    if !base.is_dir() {
+        return Err(format!("Not a directory: {base_dir}"));
+    }
+    if script_paths.is_empty() {
+        return Err("No scripts selected.".to_string());
+    }
+
+    let canonical_base = std::fs::canonicalize(&base)
+        .map_err(|e| format!("Cannot resolve directory {}: {e}", base.display()))?;
+    let canonical_base = canonical_base.to_string_lossy().to_string();
+    let available = scan_directory_entries(Path::new(&canonical_base));
+
+    let mut selected = Vec::new();
+    for script_path in &script_paths {
+        let Some(script) = available.iter().find(|script| script.path == *script_path) else {
+            return Err(format!(
+                "Script is not an executable entrypoint: {script_path}"
+            ));
+        };
+        selected.push(script.clone());
+    }
+
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let work_dir = db
+        .add_work_dir_manual(&canonical_base)
+        .map_err(|e| e.to_string())?;
+    for script in &selected {
+        db.add_script_entry(&work_dir.path, &script.path)
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(AddedWorkDir {
+        work_dir,
+        entry_scripts: selected,
+    })
+}
+
+#[tauri::command]
+pub fn add_script_file(state: State<AppState>, path: String) -> CmdResult<AddedWorkDir> {
+    let p = PathBuf::from(&path);
+    if !p.is_file() {
+        return Err(format!("Not a file: {path}"));
+    }
+    let script = script_from_file(&p)
+        .ok_or_else(|| format!("File is not an executable entry script: {}", p.display()))?;
+
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let work_dir = db
+        .add_work_dir_manual(&script.base_dir)
+        .map_err(|e| e.to_string())?;
+    db.add_script_entry(&work_dir.path, &script.path)
+        .map_err(|e| e.to_string())?;
+
+    Ok(AddedWorkDir {
+        work_dir,
+        entry_scripts: vec![script],
     })
 }
 

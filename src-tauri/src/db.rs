@@ -7,7 +7,15 @@ const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS work_dirs (
     id TEXT PRIMARY KEY,
     path TEXT NOT NULL UNIQUE,
+    scan_mode TEXT NOT NULL DEFAULT 'auto',
     created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS script_entries (
+    base_dir TEXT NOT NULL,
+    script_path TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (base_dir, script_path)
 );
 
 CREATE TABLE IF NOT EXISTS script_aliases (
@@ -91,26 +99,41 @@ impl Database {
         if !has_work_dirs {
             let _ = self.conn.execute_batch("DROP TABLE IF EXISTS jobs; DROP TABLE IF EXISTS schedules; DROP TABLE IF EXISTS scripts;");
         }
-        self.conn.execute_batch(SCHEMA)
+        self.conn.execute_batch(SCHEMA)?;
+        let _ = self.conn.execute_batch(
+            "ALTER TABLE work_dirs ADD COLUMN scan_mode TEXT NOT NULL DEFAULT 'auto';",
+        );
+        Ok(())
     }
 
     // ── Work Dirs ──
 
     pub fn add_work_dir(&self, path: &str) -> SqlResult<WorkDir> {
+        self.add_work_dir_with_mode(path, "auto")
+    }
+
+    pub fn add_work_dir_manual(&self, path: &str) -> SqlResult<WorkDir> {
+        self.add_work_dir_with_mode(path, "manual")
+    }
+
+    fn add_work_dir_with_mode(&self, path: &str, scan_mode: &str) -> SqlResult<WorkDir> {
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
         self.conn.execute(
-            "INSERT OR IGNORE INTO work_dirs (id, path, created_at) VALUES (?1, ?2, ?3)",
-            params![id, path, now],
+            "INSERT INTO work_dirs (id, path, scan_mode, created_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(path) DO UPDATE SET scan_mode = excluded.scan_mode",
+            params![id, path, scan_mode, now],
         )?;
         self.conn.query_row(
-            "SELECT id, path, created_at FROM work_dirs WHERE path = ?1",
+            "SELECT id, path, scan_mode, created_at FROM work_dirs WHERE path = ?1",
             params![path],
             |row| {
                 Ok(WorkDir {
                     id: row.get(0)?,
                     path: row.get(1)?,
-                    created_at: row.get(2)?,
+                    scan_mode: row.get(2)?,
+                    created_at: row.get(3)?,
                 })
             },
         )
@@ -119,22 +142,72 @@ impl Database {
     pub fn list_work_dirs(&self) -> SqlResult<Vec<WorkDir>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id, path, created_at FROM work_dirs ORDER BY created_at")?;
+            .prepare("SELECT id, path, scan_mode, created_at FROM work_dirs ORDER BY created_at")?;
         let rows = stmt.query_map([], |row| {
             Ok(WorkDir {
                 id: row.get(0)?,
                 path: row.get(1)?,
-                created_at: row.get(2)?,
+                scan_mode: row.get(2)?,
+                created_at: row.get(3)?,
             })
         })?;
         rows.collect()
     }
 
     pub fn remove_work_dir(&self, id: &str) -> SqlResult<bool> {
+        let path = self
+            .conn
+            .query_row(
+                "SELECT path FROM work_dirs WHERE id = ?1",
+                params![id],
+                |row| row.get::<_, String>(0),
+            )
+            .ok();
         let count = self
             .conn
             .execute("DELETE FROM work_dirs WHERE id = ?1", params![id])?;
+        if let Some(path) = path {
+            self.conn.execute(
+                "DELETE FROM script_entries WHERE base_dir = ?1",
+                params![path],
+            )?;
+        }
         Ok(count > 0)
+    }
+
+    pub fn add_script_entry(&self, base_dir: &str, script_path: &str) -> SqlResult<ScriptEntry> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT OR IGNORE INTO script_entries (base_dir, script_path, created_at)
+             VALUES (?1, ?2, ?3)",
+            params![base_dir, script_path, now],
+        )?;
+        self.conn.query_row(
+            "SELECT base_dir, script_path, created_at FROM script_entries
+             WHERE base_dir = ?1 AND script_path = ?2",
+            params![base_dir, script_path],
+            |row| {
+                Ok(ScriptEntry {
+                    base_dir: row.get(0)?,
+                    script_path: row.get(1)?,
+                    created_at: row.get(2)?,
+                })
+            },
+        )
+    }
+
+    pub fn list_script_entries(&self) -> SqlResult<Vec<ScriptEntry>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT base_dir, script_path, created_at FROM script_entries ORDER BY base_dir, script_path",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(ScriptEntry {
+                base_dir: row.get(0)?,
+                script_path: row.get(1)?,
+                created_at: row.get(2)?,
+            })
+        })?;
+        rows.collect()
     }
 
     // ── Script Aliases ──

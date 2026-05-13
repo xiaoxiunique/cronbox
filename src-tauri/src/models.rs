@@ -123,6 +123,7 @@ pub struct ScriptParam {
 pub struct WorkDir {
     pub id: String,
     pub path: String,
+    pub scan_mode: String,
     pub created_at: String,
 }
 
@@ -144,6 +145,13 @@ pub struct ScriptAlias {
     pub script_path: String,
     pub alias: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScriptEntry {
+    pub base_dir: String,
+    pub script_path: String,
+    pub created_at: String,
 }
 
 // ── Discovered script file (not stored in DB, scanned from filesystem) ──
