@@ -363,7 +363,9 @@ fn ensure_default_agent_workspace(state: &State<AppState>) -> CmdResult<WorkDir>
 /// Resolve a user-chosen directory for an agent task. The directory must exist
 /// and is registered as a working directory. If it is already registered, its
 /// existing scan mode is kept so an established directory's behavior is never
-/// silently flipped.
+/// silently flipped. A newly registered directory uses **manual** mode so the
+/// rest of the user's codebase is not pulled into Scripts — only the new agent
+/// task script (added as an explicit entry below) surfaces.
 fn resolve_agent_target_dir(state: &State<AppState>, dir: &str) -> CmdResult<WorkDir> {
     let path = PathBuf::from(dir);
     if !path.is_dir() {
@@ -381,7 +383,9 @@ fn resolve_agent_target_dir(state: &State<AppState>, dir: &str) -> CmdResult<Wor
         .find(|wd| wd.path == canonical);
     match existing {
         Some(wd) => Ok(wd),
-        None => db.add_work_dir(&canonical).map_err(|e| e.to_string()),
+        None => db
+            .add_work_dir_manual(&canonical)
+            .map_err(|e| e.to_string()),
     }
 }
 

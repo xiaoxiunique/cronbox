@@ -47,13 +47,29 @@ const agentBrowsedDirs = ref<string[]>([]);
 const creatingAgent = ref(false);
 const preparingWorkspace = ref(false);
 
-// Group scripts by base_dir
-const groupedScripts = computed(() => {
+function isAgentTask(s: ScriptFile): boolean {
+  return s.path.startsWith("cronbox/codex/") || s.path.startsWith("cronbox/claude/");
+}
+
+const agentTaskGroups = computed(() => {
   const groups: Record<string, ScriptFile[]> = {};
-  for (const s of scripts.value) {
-    (groups[s.base_dir] ??= []).push(s);
-  }
+  for (const s of scripts.value) if (isAgentTask(s)) (groups[s.base_dir] ??= []).push(s);
   return groups;
+});
+
+const codeScriptGroups = computed(() => {
+  const groups: Record<string, ScriptFile[]> = {};
+  for (const s of scripts.value) if (!isAgentTask(s)) (groups[s.base_dir] ??= []).push(s);
+  return groups;
+});
+
+const taskSections = computed(() => {
+  const sections: { kind: string; title: string; groups: Record<string, ScriptFile[]>; count: number }[] = [];
+  const agentCount = scripts.value.filter(isAgentTask).length;
+  if (agentCount > 0) sections.push({ kind: "agent", title: "Agent Tasks", groups: agentTaskGroups.value, count: agentCount });
+  const codeCount = scripts.value.length - agentCount;
+  if (codeCount > 0) sections.push({ kind: "code", title: "Code Scripts", groups: codeScriptGroups.value, count: codeCount });
+  return sections;
 });
 
 async function load() {
@@ -375,7 +391,12 @@ onUnmounted(stopPolling);
     </div>
 
     <template v-else>
-      <div v-for="(group, baseDir) in groupedScripts" :key="baseDir" class="dir-group">
+      <section v-for="section in taskSections" :key="section.kind" class="task-section">
+        <div class="task-section-head">
+          <span>{{ section.title }}</span>
+          <span class="task-section-count">{{ section.count }}</span>
+        </div>
+        <div v-for="(group, baseDir) in section.groups" :key="baseDir" class="dir-group">
         <div class="dir-header">
           <span class="dir-icon">📁</span>
           <span class="dir-name">{{ dirName(baseDir as string) }}</span>
@@ -412,7 +433,8 @@ onUnmounted(stopPolling);
               :disabled="runningJob?.status === 'running' && runScriptPath === s.path && runBaseDir === s.base_dir">⚡</button>
           </div>
         </div>
-      </div>
+        </div>
+      </section>
 
       <!-- Run output panel -->
       <div v-if="runningJob" class="run-panel">
@@ -616,6 +638,28 @@ onUnmounted(stopPolling);
 }
 .empty p { margin: 4px 0; }
 .hint { font-size: 12px; margin-top: 8px; color: var(--text-secondary); }
+
+.task-section + .task-section { margin-top: 16px; }
+.task-section-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0 2px;
+  margin: 0 0 8px;
+}
+.task-section-count {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 650;
+}
 
 .dir-group { margin-bottom: 16px; }
 .dir-header {
