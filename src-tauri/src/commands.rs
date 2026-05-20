@@ -525,6 +525,7 @@ pub fn create_schedule(
     cron_expr: String,
     timezone: String,
     args: String,
+    env: String,
 ) -> CmdResult<Schedule> {
     scheduler::validate_cron(&cron_expr)?;
     let full = PathBuf::from(&base_dir).join(&script_path);
@@ -534,7 +535,7 @@ pub fn create_schedule(
 
     let db = state.db.lock().map_err(|e| e.to_string())?;
     let schedule = db
-        .create_schedule(&script_path, &base_dir, &cron_expr, &timezone, &args)
+        .create_schedule(&script_path, &base_dir, &cron_expr, &timezone, &args, &env)
         .map_err(|e| e.to_string())?;
     if let Ok(next) = scheduler::calculate_next_run(&cron_expr, &timezone) {
         let _ = db.update_schedule_next_run(&schedule.id, &next);
@@ -559,6 +560,7 @@ pub fn update_schedule(
     cron_expr: Option<String>,
     timezone: Option<String>,
     args: Option<String>,
+    env: Option<String>,
 ) -> CmdResult<Schedule> {
     if let Some(ref c) = cron_expr {
         scheduler::validate_cron(c)?;
@@ -570,6 +572,7 @@ pub fn update_schedule(
             cron_expr.as_deref(),
             timezone.as_deref(),
             args.as_deref(),
+            env.as_deref(),
         )
         .map_err(|e| e.to_string())?;
     if let Ok(next) = scheduler::calculate_next_run(&s.cron_expr, &s.timezone) {
@@ -648,7 +651,8 @@ pub async fn run_now(
             }
         });
         let result =
-            executor::execute_with_log_callback(&full, language, &a, Some(log_callback)).await;
+            executor::execute_with_log_callback(&full, language, &a, "{}", Some(log_callback))
+                .await;
 
         let success = result.exit_code == 0;
         let logs = db
@@ -757,6 +761,13 @@ pub fn cli_status() -> String {
 #[tauri::command]
 pub fn install_cli(force: bool) -> CmdResult<String> {
     cli::install_cli_link(None, force).map(|path| path.display().to_string())
+}
+
+/// The PATH that scheduled scripts run with — resolved from the login shell at
+/// startup. Surfaced read-only in Settings so users can see what is in effect.
+#[tauri::command]
+pub fn resolved_path() -> String {
+    executor::env::effective_path()
 }
 
 #[tauri::command]

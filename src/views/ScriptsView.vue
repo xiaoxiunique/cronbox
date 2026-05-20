@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
 import { api, type ScriptFile, type Schedule, type Job, type WorkDir, type ScriptParam } from "../lib/api";
 import LanguageLogo from "../components/LanguageLogo.vue";
+import EnvEditor from "../components/EnvEditor.vue";
 import { formatDuration } from "../lib/format";
 
 const scripts = ref<ScriptFile[]>([]);
@@ -25,6 +26,7 @@ const editScheduleEnabled = ref(false);
 const editCronExpr = ref("0 * * * *");
 const editTimezone = ref("Asia/Shanghai");
 const editArgs = ref("{}");
+const editEnvPairs = ref<{ key: string; value: string }[]>([]);
 const editCronError = ref("");
 const editError = ref("");
 const editUpcoming = ref<string[]>([]);
@@ -201,6 +203,27 @@ function statusIcon(s: string) {
   return { queued: "⏳", running: "🔄", success: "✅", failure: "❌", cancelled: "⛔" }[s] || "❓";
 }
 
+function envToPairs(json: string): { key: string; value: string }[] {
+  try {
+    const obj = JSON.parse(json || "{}");
+    if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+      return Object.entries(obj).map(([key, value]) => ({ key, value: String(value) }));
+    }
+  } catch {
+    // fall through
+  }
+  return [];
+}
+
+function pairsToJson(pairs: { key: string; value: string }[]): string {
+  const obj: Record<string, string> = {};
+  for (const { key, value } of pairs) {
+    const k = key.trim();
+    if (k) obj[k] = value;
+  }
+  return JSON.stringify(obj);
+}
+
 function openEditDialog(s: ScriptFile) {
   const schedule = getSchedule(s.path, s.base_dir) ?? null;
   editScript.value = s;
@@ -210,6 +233,7 @@ function openEditDialog(s: ScriptFile) {
   editCronExpr.value = schedule?.cron_expr ?? "0 * * * *";
   editTimezone.value = schedule?.timezone ?? "Asia/Shanghai";
   editArgs.value = schedule?.args ?? "{}";
+  editEnvPairs.value = envToPairs(schedule?.env ?? "{}");
   editCronError.value = "";
   editError.value = "";
   editUpcoming.value = [];
@@ -250,16 +274,18 @@ async function saveEdit() {
   savingEdit.value = true;
   try {
     await api.setScriptAlias(script.base_dir, script.path, editAlias.value.trim() || undefined);
+    const envJson = pairsToJson(editEnvPairs.value);
     if (editSchedule.value) {
       const updated = await api.updateSchedule(
         editSchedule.value.id,
         editCronExpr.value,
         editTimezone.value,
-        scheduleArgs
+        scheduleArgs,
+        envJson
       );
       await api.setScheduleEnabled(updated.id, editScheduleEnabled.value);
     } else if (editScheduleEnabled.value) {
-      await api.createSchedule(script.path, script.base_dir, editCronExpr.value, editTimezone.value, scheduleArgs);
+      await api.createSchedule(script.path, script.base_dir, editCronExpr.value, editTimezone.value, scheduleArgs, envJson);
     }
     showEditDialog.value = false;
     await load();
@@ -428,6 +454,9 @@ onUnmounted(stopPolling);
           <input v-model="editTimezone" @input="checkEditCron" :disabled="editScheduleFieldsDisabled" />
           <label>Arguments (JSON)</label>
           <textarea v-model="editArgs" class="mono" rows="4" :disabled="editScheduleFieldsDisabled"></textarea>
+          <label>Environment Variables</label>
+          <EnvEditor v-model="editEnvPairs" :disabled="editScheduleFieldsDisabled" />
+          <div class="hint compact">Per-schedule env vars (API keys, etc). Applied on top of the resolved PATH.</div>
           <div v-if="editUpcoming.length" class="upcoming">
             <div class="upcoming-title">Next runs</div>
             <div v-for="t in editUpcoming" :key="t" class="upcoming-time">{{ t }}</div>

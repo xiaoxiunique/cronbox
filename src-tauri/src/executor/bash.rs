@@ -1,18 +1,23 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tokio::process::Command;
 
-use crate::executor::LogCallback;
+use crate::executor::{env, LogCallback};
 use crate::models::ExecutionResult;
 
 pub async fn execute(
     file_path: &Path,
     args: &str,
+    schedule_env: &str,
     log_callback: Option<LogCallback>,
 ) -> ExecutionResult {
-    let mut cmd = Command::new("bash");
+    let path = env::effective_path();
+    let bash = env::which_in("bash", &path).unwrap_or_else(|| PathBuf::from("bash"));
+
+    let mut cmd = Command::new(&bash);
     cmd.arg(file_path)
         .env("CRONBOX_ARGS", args)
+        .env("PATH", &path)
         .current_dir(file_path.parent().unwrap_or(Path::new(".")))
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -31,6 +36,9 @@ pub async fn execute(
             cmd.env(key, &val_str);
         }
     }
+
+    // Per-schedule env applied last so it can override anything above.
+    env::apply_schedule_env(&mut cmd, schedule_env);
 
     match cmd.spawn() {
         Ok(child) => super::python::collect_output(child, log_callback).await,

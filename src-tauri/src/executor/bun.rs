@@ -2,18 +2,20 @@ use std::path::Path;
 use std::process::Stdio;
 use tokio::process::Command;
 
-use crate::executor::LogCallback;
+use crate::executor::{env, LogCallback};
 use crate::models::ExecutionResult;
 
 pub async fn execute(
     file_path: &Path,
     args: &str,
+    schedule_env: &str,
     log_callback: Option<LogCallback>,
 ) -> ExecutionResult {
     let script_dir = file_path.parent().unwrap_or(Path::new("."));
 
-    // Prepend node_modules/.bin to PATH so locally installed bins are available
-    let mut path_env = std::env::var("PATH").unwrap_or_default();
+    // Prepend node_modules/.bin to the resolved PATH so locally installed bins
+    // are available.
+    let mut path_env = env::effective_path();
     let mut dir = script_dir.to_path_buf();
     loop {
         let local_bin = dir.join("node_modules/.bin");
@@ -26,7 +28,9 @@ pub async fn execute(
         }
     }
 
-    let mut cmd = Command::new("bun");
+    let bun = env::which_in("bun", &path_env).unwrap_or_else(|| "bun".into());
+
+    let mut cmd = Command::new(&bun);
     cmd.arg("run")
         .arg(file_path)
         .env("CRONBOX_ARGS", args)
@@ -45,6 +49,9 @@ pub async fn execute(
             cmd.env(&format!("ARG_{}", key.to_uppercase()), &val_str);
         }
     }
+
+    // Per-schedule env applied last so it can override anything above.
+    env::apply_schedule_env(&mut cmd, schedule_env);
 
     match cmd.spawn() {
         Ok(child) => super::python::collect_output(child, log_callback).await,

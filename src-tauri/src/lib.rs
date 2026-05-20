@@ -11,6 +11,11 @@ use state::AppState;
 use tauri::Manager;
 
 pub fn run() {
+    // Resolve the login shell's PATH up front so scripts run with the same
+    // PATH the user has in their terminal, not the minimal PATH a Finder-
+    // launched GUI app inherits.
+    executor::env::init_effective_path_from_login_shell();
+
     let db_path = cli::default_db_path();
 
     let app_state = AppState::new(db_path.clone()).expect("Failed to initialize CronBox engine");
@@ -92,6 +97,7 @@ pub fn run() {
             commands::cleanup_old_jobs,
             commands::cli_status,
             commands::install_cli,
+            commands::resolved_path,
             commands::validate_cron,
             commands::upcoming_runs,
             commands::detect_args,

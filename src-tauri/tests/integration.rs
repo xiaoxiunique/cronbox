@@ -17,7 +17,7 @@ mod integration_tests {
     #[tokio::test]
     async fn test_bash_execution() {
         let path = create_temp_script("hello.sh", "#!/bin/bash\necho 'hello from bash'");
-        let result = executor::execute(&path, ScriptLanguage::Bash, "{}").await;
+        let result = executor::execute(&path, ScriptLanguage::Bash, "{}", "{}").await;
         assert_eq!(result.exit_code, 0);
         assert!(result.stdout.contains("hello from bash"));
         println!("Bash: {}ms — {}", result.duration_ms, result.stdout.trim());
@@ -26,15 +26,34 @@ mod integration_tests {
     #[tokio::test]
     async fn test_bash_with_args() {
         let path = create_temp_script("args.sh", "#!/bin/bash\necho \"greeting=$greeting\"");
-        let result = executor::execute(&path, ScriptLanguage::Bash, r#"{"greeting": "hi"}"#).await;
+        let result =
+            executor::execute(&path, ScriptLanguage::Bash, r#"{"greeting": "hi"}"#, "{}").await;
         assert_eq!(result.exit_code, 0, "stderr: {}", result.stderr);
         assert!(result.stdout.contains("greeting=hi"));
     }
 
     #[tokio::test]
+    async fn test_bash_schedule_env_is_injected() {
+        let path = create_temp_script("env.sh", "#!/bin/bash\necho \"MY_VAR=$MY_VAR\"");
+        let result = executor::execute(
+            &path,
+            ScriptLanguage::Bash,
+            "{}",
+            r#"{"MY_VAR":"injected"}"#,
+        )
+        .await;
+        assert_eq!(result.exit_code, 0, "stderr: {}", result.stderr);
+        assert!(
+            result.stdout.contains("MY_VAR=injected"),
+            "stdout: {}",
+            result.stdout
+        );
+    }
+
+    #[tokio::test]
     async fn test_bash_failure() {
         let path = create_temp_script("fail.sh", "#!/bin/bash\necho 'about to fail'\nexit 1");
-        let result = executor::execute(&path, ScriptLanguage::Bash, "{}").await;
+        let result = executor::execute(&path, ScriptLanguage::Bash, "{}", "{}").await;
         assert_ne!(result.exit_code, 0);
     }
 
@@ -44,7 +63,7 @@ mod integration_tests {
             "hello.py",
             "import json, os\nprint('hello from python')\nprint(json.dumps({'answer': 42}))",
         );
-        let result = executor::execute(&path, ScriptLanguage::Python, "{}").await;
+        let result = executor::execute(&path, ScriptLanguage::Python, "{}", "{}").await;
         assert_eq!(result.exit_code, 0, "stderr: {}", result.stderr);
         assert!(result.stdout.contains("hello from python"));
         assert!(result.result.is_some());
@@ -69,7 +88,7 @@ mod integration_tests {
             "hello.ts",
             "console.log('hello from bun')\nconsole.log(JSON.stringify({ts: true}))",
         );
-        let result = executor::execute(&path, ScriptLanguage::Bun, "{}").await;
+        let result = executor::execute(&path, ScriptLanguage::Bun, "{}", "{}").await;
         assert_eq!(result.exit_code, 0, "stderr: {}", result.stderr);
         assert!(result.stdout.contains("hello from bun"));
         println!("Bun: {}ms — result={:?}", result.duration_ms, result.result);
@@ -205,7 +224,14 @@ mod integration_tests {
         {
             let db = state.db.lock().unwrap();
             let s = db
-                .create_schedule("hello.sh", dir.to_str().unwrap(), "0 * * * *", "UTC", "{}")
+                .create_schedule(
+                    "hello.sh",
+                    dir.to_str().unwrap(),
+                    "0 * * * *",
+                    "UTC",
+                    "{}",
+                    "{}",
+                )
                 .unwrap();
             let next = cronbox_lib::scheduler::calculate_next_run("0 * * * *", "UTC").unwrap();
             db.update_schedule_next_run(&s.id, &next).unwrap();
@@ -222,6 +248,7 @@ mod integration_tests {
         let result = rt.block_on(cronbox_lib::executor::execute(
             &full_path,
             ScriptLanguage::Bash,
+            "{}",
             "{}",
         ));
         assert_eq!(result.exit_code, 0);

@@ -457,7 +457,7 @@ fn create_schedule_from_cli(
     let next = scheduler::calculate_next_run(cron_expr, timezone)?;
 
     let schedule = db
-        .create_schedule(script_path, base_dir, cron_expr, timezone, args)
+        .create_schedule(script_path, base_dir, cron_expr, timezone, args, "{}")
         .map_err(|e| e.to_string())?;
     db.update_schedule_next_run(&schedule.id, &next)
         .map_err(|e| e.to_string())?;
@@ -569,6 +569,7 @@ fn run_script(args: &[String]) -> Result<i32, String> {
             &full_path,
             language,
             &options.args,
+            "{}",
             Some(log_callback),
         ));
 

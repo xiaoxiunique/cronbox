@@ -133,16 +133,24 @@ async fn tick(db: &Arc<Mutex<Database>>, db_path: &Path) -> Result<(), String> {
         let bd = schedule.base_dir.clone();
         let sp = schedule.script_path.clone();
         let a = schedule.args.clone();
+        let e = schedule.env.clone();
         if let Some(job_id) = job_id {
             tokio::spawn(async move {
-                execute_job(&db_path, &bd, &job_id, &sp, &a).await;
+                execute_job(&db_path, &bd, &job_id, &sp, &a, &e).await;
             });
         }
     }
     Ok(())
 }
 
-async fn execute_job(db_path: &Path, base_dir: &str, job_id: &str, script_path: &str, args: &str) {
+async fn execute_job(
+    db_path: &Path,
+    base_dir: &str,
+    job_id: &str,
+    script_path: &str,
+    args: &str,
+    env: &str,
+) {
     let db = match Database::open(db_path) {
         Ok(d) => d,
         Err(e) => {
@@ -189,7 +197,8 @@ async fn execute_job(db_path: &Path, base_dir: &str, job_id: &str, script_path: 
         }
     });
     let result =
-        executor::execute_with_log_callback(&full_path, language, args, Some(log_callback)).await;
+        executor::execute_with_log_callback(&full_path, language, args, env, Some(log_callback))
+            .await;
 
     let success = result.exit_code == 0;
     let logs = db

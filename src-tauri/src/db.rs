@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS schedules (
     next_run_at TEXT,
     last_run_at TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    env TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS jobs (
@@ -103,6 +104,9 @@ impl Database {
         let _ = self.conn.execute_batch(
             "ALTER TABLE work_dirs ADD COLUMN scan_mode TEXT NOT NULL DEFAULT 'auto';",
         );
+        let _ = self
+            .conn
+            .execute_batch("ALTER TABLE schedules ADD COLUMN env TEXT NOT NULL DEFAULT '{}';");
         Ok(())
     }
 
@@ -274,20 +278,21 @@ impl Database {
         cron_expr: &str,
         timezone: &str,
         args: &str,
+        env: &str,
     ) -> SqlResult<Schedule> {
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
         self.conn.execute(
-            "INSERT INTO schedules (id, script_path, base_dir, cron_expr, timezone, args, enabled, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?8)",
-            params![id, script_path, base_dir, cron_expr, timezone, args, now, now],
+            "INSERT INTO schedules (id, script_path, base_dir, cron_expr, timezone, args, enabled, created_at, updated_at, env)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?8, ?9)",
+            params![id, script_path, base_dir, cron_expr, timezone, args, now, now, env],
         )?;
         self.get_schedule(&id)
     }
 
     pub fn get_schedule(&self, id: &str) -> SqlResult<Schedule> {
         self.conn.query_row(
-            "SELECT id, script_path, base_dir, cron_expr, timezone, args, enabled, next_run_at, last_run_at, created_at, updated_at FROM schedules WHERE id = ?1",
+            "SELECT id, script_path, base_dir, cron_expr, timezone, args, enabled, next_run_at, last_run_at, created_at, updated_at, env FROM schedules WHERE id = ?1",
             params![id],
             |row| row_to_schedule(row),
         )
@@ -295,7 +300,7 @@ impl Database {
 
     pub fn list_schedules(&self) -> SqlResult<Vec<Schedule>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, script_path, base_dir, cron_expr, timezone, args, enabled, next_run_at, last_run_at, created_at, updated_at FROM schedules ORDER BY script_path",
+            "SELECT id, script_path, base_dir, cron_expr, timezone, args, enabled, next_run_at, last_run_at, created_at, updated_at, env FROM schedules ORDER BY script_path",
         )?;
         let rows = stmt.query_map([], |row| row_to_schedule(row))?;
         rows.collect()
@@ -307,15 +312,17 @@ impl Database {
         cron_expr: Option<&str>,
         timezone: Option<&str>,
         args: Option<&str>,
+        env: Option<&str>,
     ) -> SqlResult<Schedule> {
         let now = chrono::Utc::now().to_rfc3339();
         let existing = self.get_schedule(id)?;
         let cron_expr = cron_expr.unwrap_or(&existing.cron_expr);
         let timezone = timezone.unwrap_or(&existing.timezone);
         let args = args.unwrap_or(&existing.args);
+        let env = env.unwrap_or(&existing.env);
         self.conn.execute(
-            "UPDATE schedules SET cron_expr = ?1, timezone = ?2, args = ?3, updated_at = ?4 WHERE id = ?5",
-            params![cron_expr, timezone, args, now, id],
+            "UPDATE schedules SET cron_expr = ?1, timezone = ?2, args = ?3, env = ?4, updated_at = ?5 WHERE id = ?6",
+            params![cron_expr, timezone, args, env, now, id],
         )?;
         self.get_schedule(id)
     }
@@ -354,7 +361,7 @@ impl Database {
 
     pub fn get_due_schedules(&self, now: &str) -> SqlResult<Vec<Schedule>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, script_path, base_dir, cron_expr, timezone, args, enabled, next_run_at, last_run_at, created_at, updated_at
+            "SELECT id, script_path, base_dir, cron_expr, timezone, args, enabled, next_run_at, last_run_at, created_at, updated_at, env
              FROM schedules WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ?1",
         )?;
         let rows = stmt.query_map(params![now], |row| row_to_schedule(row))?;
@@ -561,6 +568,7 @@ fn row_to_schedule(row: &rusqlite::Row) -> SqlResult<Schedule> {
         last_run_at: row.get(8)?,
         created_at: row.get(9)?,
         updated_at: row.get(10)?,
+        env: row.get(11)?,
     })
 }
 
@@ -639,10 +647,40 @@ mod tests {
     fn test_schedule_with_base_dir() {
         let db = Database::open_in_memory().unwrap();
         let s = db
-            .create_schedule("test.sh", "/home/user/scripts", "* * * * *", "UTC", "{}")
+            .create_schedule(
+                "test.sh",
+                "/home/user/scripts",
+                "* * * * *",
+                "UTC",
+                "{}",
+                "{}",
+            )
             .unwrap();
         assert_eq!(s.base_dir, "/home/user/scripts");
         assert_eq!(s.script_path, "test.sh");
+        assert_eq!(s.env, "{}");
+    }
+
+    #[test]
+    fn test_schedule_env_roundtrip() {
+        let db = Database::open_in_memory().unwrap();
+        let env = r#"{"API_KEY":"secret","ENV":"prod"}"#;
+        let s = db
+            .create_schedule("test.sh", "/tmp", "* * * * *", "UTC", "{}", env)
+            .unwrap();
+        assert_eq!(s.env, env);
+        assert_eq!(db.get_schedule(&s.id).unwrap().env, env);
+
+        let updated = db
+            .update_schedule(&s.id, None, None, None, Some(r#"{"ENV":"staging"}"#))
+            .unwrap();
+        assert_eq!(updated.env, r#"{"ENV":"staging"}"#);
+
+        // Omitting env on update preserves the existing value.
+        let kept = db
+            .update_schedule(&s.id, Some("0 * * * *"), None, None, None)
+            .unwrap();
+        assert_eq!(kept.env, r#"{"ENV":"staging"}"#);
     }
 
     #[test]
@@ -682,7 +720,7 @@ mod tests {
     fn test_schedule_active_job_and_skipped_job() {
         let db = Database::open_in_memory().unwrap();
         let schedule = db
-            .create_schedule("test.sh", "/tmp", "* * * * *", "UTC", "{}")
+            .create_schedule("test.sh", "/tmp", "* * * * *", "UTC", "{}", "{}")
             .unwrap();
 
         assert!(!db.has_active_job_for_schedule(&schedule.id).unwrap());

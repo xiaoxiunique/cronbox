@@ -182,6 +182,8 @@ pub struct Schedule {
     pub cron_expr: String,
     pub timezone: String,
     pub args: String, // JSON
+    /// Per-schedule environment variables as a JSON object of string→string.
+    pub env: String,
     pub enabled: bool,
     pub next_run_at: Option<String>,
     pub last_run_at: Option<String>,

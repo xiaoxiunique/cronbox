@@ -3,18 +3,21 @@ use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
-use crate::executor::LogCallback;
+use crate::executor::{env, LogCallback};
 use crate::models::ExecutionResult;
 
 pub async fn execute(
     file_path: &Path,
     args: &str,
+    schedule_env: &str,
     log_callback: Option<LogCallback>,
 ) -> ExecutionResult {
     let script_dir = file_path.parent().unwrap_or(Path::new("."));
+    let base_path = env::effective_path();
 
     // Determine how to run: uv > .venv > system python3
     let (program, base_args) = resolve_python_runner(script_dir, file_path);
+    let program = env::which_in(&program.to_string_lossy(), &base_path).unwrap_or(program);
 
     let mut cmd = Command::new(&program);
     cmd.args(&base_args)
@@ -24,15 +27,16 @@ pub async fn execute(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    // If using a venv python directly, set VIRTUAL_ENV and PATH
+    // Base PATH is the resolved login-shell PATH; prepend the venv bin when
+    // running a venv python directly.
+    let mut run_path = base_path.clone();
     if program.to_str().map_or(false, |s| s.contains(".venv")) {
         if let Some(venv_dir) = program.parent().and_then(|bin| bin.parent()) {
             cmd.env("VIRTUAL_ENV", venv_dir);
-            let venv_bin = venv_dir.join("bin");
-            let sys_path = std::env::var("PATH").unwrap_or_default();
-            cmd.env("PATH", format!("{}:{}", venv_bin.display(), sys_path));
+            run_path = format!("{}:{}", venv_dir.join("bin").display(), base_path);
         }
     }
+    cmd.env("PATH", &run_path);
 
     // Convert JSON args to CLI arguments AND env vars
     if let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(args) {
@@ -48,6 +52,9 @@ pub async fn execute(
             cmd.env(&format!("ARG_{}", key.to_uppercase()), &val_str);
         }
     }
+
+    // Per-schedule env applied last so it can override anything above.
+    env::apply_schedule_env(&mut cmd, schedule_env);
 
     run_command(cmd, log_callback).await
 }
@@ -190,12 +197,7 @@ fn has_uv_project(start_dir: &Path) -> bool {
 }
 
 fn which(name: &str) -> Option<std::path::PathBuf> {
-    std::env::var("PATH").ok().and_then(|paths| {
-        paths.split(':').find_map(|p| {
-            let full = std::path::Path::new(p).join(name);
-            full.is_file().then_some(full)
-        })
-    })
+    env::which_in(name, &env::effective_path())
 }
 
 /// Public helper: resolve the best python binary for a given script directory.

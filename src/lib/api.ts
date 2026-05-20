@@ -32,6 +32,7 @@ export interface Schedule {
   cron_expr: string;
   timezone: string;
   args: string;
+  env: string;
   enabled: boolean;
   next_run_at: string | null;
   last_run_at: string | null;
@@ -110,11 +111,11 @@ export const api = {
   createClaudeTask: (name: string, prompt: string) =>
     invoke<CreatedCodexTask>("create_claude_task", { name, prompt }),
 
-  createSchedule: (scriptPath: string, baseDir: string, cronExpr: string, timezone: string, args: string) =>
-    invoke<Schedule>("create_schedule", { scriptPath, baseDir, cronExpr, timezone, args }),
+  createSchedule: (scriptPath: string, baseDir: string, cronExpr: string, timezone: string, args: string, env: string = "{}") =>
+    invoke<Schedule>("create_schedule", { scriptPath, baseDir, cronExpr, timezone, args, env }),
   listSchedules: () => invoke<Schedule[]>("list_schedules"),
-  updateSchedule: (id: string, cronExpr?: string, timezone?: string, args?: string) =>
-    invoke<Schedule>("update_schedule", { id, cronExpr, timezone, args }),
+  updateSchedule: (id: string, cronExpr?: string, timezone?: string, args?: string, env?: string) =>
+    invoke<Schedule>("update_schedule", { id, cronExpr, timezone, args, env }),
   setScheduleEnabled: (id: string, enabled: boolean) =>
     invoke<void>("set_schedule_enabled", { id, enabled }),
   deleteSchedule: (id: string) => invoke<boolean>("delete_schedule", { id }),
@@ -130,6 +131,7 @@ export const api = {
   cleanupOldJobs: (days: number = 30) => invoke<number>("cleanup_old_jobs", { days }),
   cliStatus: () => invoke<string>("cli_status"),
   installCli: (force: boolean = false) => invoke<string>("install_cli", { force }),
+  resolvedPath: () => invoke<string>("resolved_path"),
 
   validateCron: (cronExpr: string) => invoke<void>("validate_cron", { cronExpr }),
   upcomingRuns: (cronExpr: string, timezone: string, count: number = 5) =>

@@ -6,6 +6,7 @@ import LanguageLogo from "../components/LanguageLogo.vue";
 
 const workDirs = ref<WorkDir[]>([]);
 const cliStatus = ref("");
+const resolvedPath = ref("");
 const showPicker = ref(false);
 const pickerBaseDir = ref("");
 const pickerScripts = ref<ScriptFile[]>([]);
@@ -13,10 +14,12 @@ const selectedPaths = ref<Set<string>>(new Set());
 const savingPicker = ref(false);
 
 const selectedCount = computed(() => selectedPaths.value.size);
+const resolvedPathDirs = computed(() => resolvedPath.value.split(":").filter(Boolean));
 
 async function load() {
   workDirs.value = await api.listWorkDirs();
   cliStatus.value = await api.cliStatus();
+  resolvedPath.value = await api.resolvedPath();
 }
 
 async function addDir() {
@@ -157,6 +160,20 @@ onMounted(load);
     </div>
 
     <div class="section">
+      <div class="section-title">Script Environment</div>
+      <div class="card">
+        <div class="hint">
+          Scripts run with this PATH, resolved from your login shell at startup. This is what lets
+          scheduled scripts find tools like bun, uv, and Homebrew binaries.
+        </div>
+        <div class="path-list">
+          <div v-for="dir in resolvedPathDirs" :key="dir" class="path-dir">{{ dir }}</div>
+          <div v-if="resolvedPathDirs.length === 0" class="empty-dirs">PATH not resolved yet</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
       <div class="section-title">About</div>
       <div class="card">
         <div>Version: 0.1.0</div>
@@ -276,6 +293,23 @@ onMounted(load);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
+}
+.path-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.path-dir {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
 }
 .btn {
   padding: 6px 14px;
