@@ -61,6 +61,7 @@ fn run(args: Vec<String>) -> Result<i32, String> {
         "scripts" | "script" => run_scripts(&args[1..]),
         "schedules" | "schedule" => run_schedules(&args[1..]),
         "jobs" | "job" => run_jobs(&args[1..]),
+        "skills" | "skill" => run_skills(&args[1..]),
         "run" => run_script(&args[1..]),
         other => Err(format!(
             "unknown command: {other}\n\nRun `cronbox help` for usage."
@@ -809,6 +810,103 @@ fn create_link_or_copy(exe: &Path, target: &Path) -> Result<(), String> {
         .map_err(|e| format!("cannot copy {} -> {}: {e}", exe.display(), target.display()))
 }
 
+// ── Skill install (AI agent integration) ────────────────────────────────
+
+/// SKILL.md content shipped with the binary. Lets an AI agent (Claude Code,
+/// for now) understand the CronBox CLI end-to-end and create scheduled tasks
+/// on the user's behalf without the user touching CronBox's UI.
+const SKILL_CONTENT: &str = include_str!("../../skills/cronbox.md");
+
+fn run_skills(args: &[String]) -> Result<i32, String> {
+    match args.first().map(String::as_str) {
+        Some("install") => skills_install(&args[1..]),
+        Some("status") | None => {
+            print!("{}", skills_status_text());
+            Ok(0)
+        }
+        Some("uninstall") | Some("remove") | Some("rm") => skills_uninstall(),
+        Some(other) => Err(format!(
+            "unknown skills command: {other}\nusage: cronbox skills install [--force] | status | uninstall"
+        )),
+    }
+}
+
+fn claude_skill_path() -> Result<PathBuf, String> {
+    let home = dirs_next::home_dir().ok_or("cannot resolve home directory")?;
+    Ok(home.join(".claude/skills/cronbox/SKILL.md"))
+}
+
+fn skills_install(args: &[String]) -> Result<i32, String> {
+    let force = args.iter().any(|a| a == "--force" || a == "-f");
+    let target = claude_skill_path()?;
+    let skill_dir = target
+        .parent()
+        .ok_or_else(|| format!("invalid skill path: {}", target.display()))?;
+    let skills_root = skill_dir
+        .parent()
+        .ok_or_else(|| format!("invalid skill path: {}", target.display()))?;
+
+    if !skills_root.is_dir() {
+        return Err(format!(
+            "{} does not exist — install Claude Code (or run it once) before `cronbox skills install`",
+            skills_root.display()
+        ));
+    }
+
+    if target.exists() && !force {
+        let existing = fs::read_to_string(&target).unwrap_or_default();
+        if existing == SKILL_CONTENT {
+            println!("up to date: {}", target.display());
+            return Ok(0);
+        }
+        return Err(format!(
+            "{} already exists with different content. Re-run with --force to overwrite.",
+            target.display()
+        ));
+    }
+
+    fs::create_dir_all(skill_dir)
+        .map_err(|e| format!("cannot create {}: {e}", skill_dir.display()))?;
+    fs::write(&target, SKILL_CONTENT)
+        .map_err(|e| format!("cannot write {}: {e}", target.display()))?;
+    println!("installed: {}", target.display());
+    Ok(0)
+}
+
+fn skills_status_text() -> String {
+    let target = match claude_skill_path() {
+        Ok(p) => p,
+        Err(err) => return format!("error: {err}\n"),
+    };
+    if !target.exists() {
+        return format!("not installed: {}\n", target.display());
+    }
+    let on_disk = fs::read_to_string(&target).unwrap_or_default();
+    if on_disk == SKILL_CONTENT {
+        format!("installed (current): {}\n", target.display())
+    } else {
+        format!(
+            "installed (out of date — re-run `cronbox skills install --force`): {}\n",
+            target.display()
+        )
+    }
+}
+
+fn skills_uninstall() -> Result<i32, String> {
+    let target = claude_skill_path()?;
+    if !target.exists() {
+        println!("nothing to remove: {}", target.display());
+        return Ok(0);
+    }
+    fs::remove_file(&target).map_err(|e| format!("cannot remove {}: {e}", target.display()))?;
+    // Best-effort: clean up the now-empty parent dir.
+    if let Some(parent) = target.parent() {
+        let _ = fs::remove_dir(parent);
+    }
+    println!("removed: {}", target.display());
+    Ok(0)
+}
+
 fn print_help() {
     println!(
         r#"CronBox CLI
@@ -838,6 +936,10 @@ Usage:
   cronbox jobs show <id-prefix>
   cronbox jobs cancel <id-prefix>
   cronbox jobs cleanup [days]
+
+  cronbox skills install [--force]
+  cronbox skills status
+  cronbox skills uninstall
 
   cronbox run <base-dir> <script-path> [--args JSON]
 
