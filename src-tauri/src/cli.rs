@@ -657,15 +657,38 @@ pub fn cli_status_text(target: Option<PathBuf>) -> String {
 }
 
 fn default_cli_target() -> PathBuf {
-    if let Some(paths) = env::var_os("PATH") {
-        for dir in env::split_paths(&paths) {
-            let s = dir.to_string_lossy();
-            if s == "/usr/local/bin" || s == "/opt/homebrew/bin" || s.ends_with("/.local/bin") {
-                return dir.join("cronbox");
-            }
+    // Use the resolved login-shell PATH: a Finder-launched GUI app otherwise
+    // sees only a minimal PATH (/usr/bin:/bin:...) with no Homebrew dir, and
+    // would fall through to a root-owned location. Among the known bin dirs,
+    // prefer one that is writable without sudo — on Apple Silicon
+    // `/usr/local/bin` is root-owned.
+    let path = crate::executor::env::effective_path();
+    for dir in env::split_paths(&path) {
+        let s = dir.to_string_lossy();
+        let known = s == "/usr/local/bin" || s == "/opt/homebrew/bin" || s.ends_with("/.local/bin");
+        if known && dir.is_dir() && dir_is_writable(&dir) {
+            return dir.join("cronbox");
         }
     }
+    // Fallback: ~/.local/bin — always creatable without sudo (the user may
+    // still need to add it to PATH for the `cronbox` command to resolve).
+    if let Some(home) = dirs_next::home_dir() {
+        return home.join(".local/bin/cronbox");
+    }
     PathBuf::from("/usr/local/bin/cronbox")
+}
+
+/// Whether a new file can be created in `dir` without sudo. Probes by creating
+/// and removing a temp file — the only reliable cross-platform check.
+fn dir_is_writable(dir: &Path) -> bool {
+    let probe = dir.join(format!(".cronbox-write-test-{}", std::process::id()));
+    match fs::File::create(&probe) {
+        Ok(_) => {
+            let _ = fs::remove_file(&probe);
+            true
+        }
+        Err(_) => false,
+    }
 }
 
 fn parse_install_cli_args(args: &[String]) -> Result<(Option<PathBuf>, bool), String> {
