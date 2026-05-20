@@ -236,8 +236,9 @@ pub fn create_codex_task(
     state: State<AppState>,
     name: String,
     prompt: String,
+    base_dir: Option<String>,
 ) -> CmdResult<CreatedCodexTask> {
-    create_agent_task(&state, AgentTaskKind::Codex, name, prompt)
+    create_agent_task(&state, AgentTaskKind::Codex, name, prompt, base_dir)
 }
 
 #[tauri::command]
@@ -245,8 +246,9 @@ pub fn create_claude_task(
     state: State<AppState>,
     name: String,
     prompt: String,
+    base_dir: Option<String>,
 ) -> CmdResult<CreatedCodexTask> {
-    create_agent_task(&state, AgentTaskKind::Claude, name, prompt)
+    create_agent_task(&state, AgentTaskKind::Claude, name, prompt, base_dir)
 }
 
 enum AgentTaskKind {
@@ -282,8 +284,12 @@ fn create_agent_task(
     kind: AgentTaskKind,
     name: String,
     prompt: String,
+    base_dir: Option<String>,
 ) -> CmdResult<CreatedCodexTask> {
-    let work_dir = ensure_default_agent_workspace(&state)?;
+    let work_dir = match base_dir.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        None => ensure_default_agent_workspace(state)?,
+        Some(dir) => resolve_agent_target_dir(state, dir)?,
+    };
     let base_dir = work_dir.path.clone();
     let base = PathBuf::from(&base_dir);
 
@@ -311,12 +317,17 @@ fn create_agent_task(
     make_executable(&script_path)?;
 
     let relative_path = format!("cronbox/{}/{slug}.sh", kind.folder());
-    state
-        .db
-        .lock()
-        .map_err(|e| e.to_string())?
-        .set_script_alias(&base_dir, &relative_path, Some(name.trim()))
-        .map_err(|e| e.to_string())?;
+    {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        db.set_script_alias(&base_dir, &relative_path, Some(name.trim()))
+            .map_err(|e| e.to_string())?;
+        // A "manual" working directory only surfaces explicitly-listed scripts,
+        // so register the new task — otherwise it would stay hidden.
+        if work_dir.scan_mode == "manual" {
+            db.add_script_entry(&base_dir, &relative_path)
+                .map_err(|e| e.to_string())?;
+        }
+    }
     Ok(CreatedCodexTask {
         script: ScriptFile {
             path: relative_path,
@@ -347,6 +358,31 @@ fn ensure_default_agent_workspace(state: &State<AppState>) -> CmdResult<WorkDir>
         .map_err(|e| e.to_string())?
         .add_work_dir(&canonical_path)
         .map_err(|e| e.to_string())
+}
+
+/// Resolve a user-chosen directory for an agent task. The directory must exist
+/// and is registered as a working directory. If it is already registered, its
+/// existing scan mode is kept so an established directory's behavior is never
+/// silently flipped.
+fn resolve_agent_target_dir(state: &State<AppState>, dir: &str) -> CmdResult<WorkDir> {
+    let path = PathBuf::from(dir);
+    if !path.is_dir() {
+        return Err(format!("Not a directory: {dir}"));
+    }
+    let canonical = std::fs::canonicalize(&path)
+        .map_err(|e| format!("Cannot resolve {dir}: {e}"))?
+        .to_string_lossy()
+        .to_string();
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let existing = db
+        .list_work_dirs()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|wd| wd.path == canonical);
+    match existing {
+        Some(wd) => Ok(wd),
+        None => db.add_work_dir(&canonical).map_err(|e| e.to_string()),
+    }
 }
 
 fn write_if_missing(path: &Path, content: &str) -> CmdResult<()> {

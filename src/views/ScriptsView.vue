@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
 import { api, type ScriptFile, type Schedule, type Job, type WorkDir, type ScriptParam } from "../lib/api";
+import { open } from "@tauri-apps/plugin-dialog";
 import LanguageLogo from "../components/LanguageLogo.vue";
 import EnvEditor from "../components/EnvEditor.vue";
 import { formatDuration } from "../lib/format";
@@ -41,6 +42,8 @@ const agentKind = ref<AgentKind>("codex");
 const agentName = ref("daily-codex-task");
 const agentPrompt = ref("Summarize the current repository status and suggest the next concrete action.");
 const agentWorkspace = ref<WorkDir | null>(null);
+const agentBaseDir = ref("");
+const agentBrowsedDirs = ref<string[]>([]);
 const creatingAgent = ref(false);
 const preparingWorkspace = ref(false);
 
@@ -62,6 +65,12 @@ async function load() {
 const agentTitle = computed(() => agentKind.value === "codex" ? "Codex Task" : "Claude Task");
 const agentCommand = computed(() => agentKind.value === "codex" ? "codex exec" : "claude -p");
 const agentFolder = computed(() => agentKind.value === "codex" ? "codex" : "claude");
+const agentDirChoices = computed(() => {
+  const paths = new Set<string>(workDirs.value.map((d) => d.path));
+  for (const d of agentBrowsedDirs.value) paths.add(d);
+  if (agentBaseDir.value) paths.add(agentBaseDir.value);
+  return Array.from(paths);
+});
 
 async function openAgentDialog(kind: AgentKind) {
   agentKind.value = kind;
@@ -73,6 +82,8 @@ async function openAgentDialog(kind: AgentKind) {
   try {
     agentWorkspace.value = await api.ensureAgentWorkspace();
     await load();
+    agentBrowsedDirs.value = [];
+    agentBaseDir.value = agentWorkspace.value?.path ?? "";
     showAgentDialog.value = true;
   } catch (e: any) {
     alert(e);
@@ -81,12 +92,24 @@ async function openAgentDialog(kind: AgentKind) {
   }
 }
 
+async function browseAgentDir() {
+  try {
+    const selected = await open({ directory: true, multiple: false });
+    if (!selected) return;
+    const path = selected as string;
+    if (!agentBrowsedDirs.value.includes(path)) agentBrowsedDirs.value.push(path);
+    agentBaseDir.value = path;
+  } catch (e: any) {
+    alert(e);
+  }
+}
+
 async function createAgentTask() {
   if (!agentName.value.trim() || !agentPrompt.value.trim()) return;
   creatingAgent.value = true;
   try {
     const create = agentKind.value === "codex" ? api.createCodexTask : api.createClaudeTask;
-    const created = await create(agentName.value.trim(), agentPrompt.value);
+    const created = await create(agentName.value.trim(), agentPrompt.value, agentBaseDir.value);
     showAgentDialog.value = false;
     await load();
     const job = await api.runNow(created.script.path, created.script.base_dir);
@@ -477,12 +500,15 @@ onUnmounted(stopPolling);
     <div v-if="showAgentDialog" class="overlay" @click.self="showAgentDialog = false">
       <div class="dialog agent-dialog">
         <h3>Create {{ agentTitle }}</h3>
-        <div class="workspace-box">
-          <div class="workspace-label">Agent workspace</div>
-          <div class="workspace-path">{{ agentWorkspace?.path ?? '~/.cronbox' }}</div>
-          <div class="hint">
-            CronBox runs <span class="mono">{{ agentCommand }}</span> here and keeps reusable rules in <span class="mono">AGENTS.md</span> / <span class="mono">CLAUDE.md</span>.
-          </div>
+        <label>Target directory</label>
+        <div class="dir-picker">
+          <select v-model="agentBaseDir" class="mono">
+            <option v-for="d in agentDirChoices" :key="d" :value="d">{{ d }}</option>
+          </select>
+          <button type="button" @click="browseAgentDir" class="btn">Browse…</button>
+        </div>
+        <div class="hint">
+          CronBox writes <span class="mono">cronbox/{{ agentFolder }}/&lt;task&gt;.sh</span> into this directory and runs <span class="mono">{{ agentCommand }}</span> there.
         </div>
         <label>Task name</label>
         <input v-model="agentName" :placeholder="agentKind === 'codex' ? 'daily-codex-task' : 'daily-claude-task'" />
@@ -878,25 +904,18 @@ onUnmounted(stopPolling);
 .schedule-form.disabled {
   opacity: 0.58;
 }
-.workspace-box {
-  background: var(--bg-soft);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px;
-  margin-bottom: 4px;
+.dir-picker {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
-.workspace-label {
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
+.dir-picker select {
+  flex: 1;
+  min-width: 0;
 }
-.workspace-path {
-  margin-top: 3px;
-  font-family: monospace;
-  font-size: 12px;
-  overflow-wrap: anywhere;
+.dir-picker .btn {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .dialog h3 { margin: 0 0 16px; font-size: 16px; }
 .dialog label { display: block; font-size: 12px; color: var(--text-secondary); margin: 12px 0 4px; }

@@ -107,10 +107,10 @@ export const api = {
   setScriptAlias: (baseDir: string, scriptPath: string, alias?: string) =>
     invoke<void>("set_script_alias", { baseDir, scriptPath, alias }),
   ensureAgentWorkspace: () => invoke<WorkDir>("ensure_agent_workspace"),
-  createCodexTask: (name: string, prompt: string) =>
-    invoke<CreatedCodexTask>("create_codex_task", { name, prompt }),
-  createClaudeTask: (name: string, prompt: string) =>
-    invoke<CreatedCodexTask>("create_claude_task", { name, prompt }),
+  createCodexTask: (name: string, prompt: string, baseDir: string = "") =>
+    invoke<CreatedCodexTask>("create_codex_task", { name, prompt, baseDir }),
+  createClaudeTask: (name: string, prompt: string, baseDir: string = "") =>
+    invoke<CreatedCodexTask>("create_claude_task", { name, prompt, baseDir }),
 
   createSchedule: (scriptPath: string, baseDir: string, cronExpr: string, timezone: string, args: string, env: string = "{}") =>
     invoke<Schedule>("create_schedule", { scriptPath, baseDir, cronExpr, timezone, args, env }),
