@@ -34,7 +34,7 @@ async function addDir() {
       }
       pickerBaseDir.value = path;
       pickerScripts.value = scripts;
-      selectedPaths.value = new Set(scripts.map((script) => script.path));
+      selectedPaths.value = new Set();
       showPicker.value = true;
     }
   } catch (e: any) {
@@ -198,6 +198,11 @@ onMounted(load);
             <button @click="clearSelectedScripts" class="link-btn">Clear</button>
           </div>
         </div>
+        <div class="picker-note">
+          Detection is heuristic — a shebang or a Python <span class="mono">__main__</span> block
+          does not always mean a file is a standalone task. Check the matched reason and pick only
+          the scripts you actually want to run.
+        </div>
 
         <div class="script-picker-list">
           <label v-for="script in pickerScripts" :key="script.path" class="script-pick-row">
@@ -210,6 +215,7 @@ onMounted(load);
             <span class="pick-text">
               <span class="pick-name">{{ script.alias }}</span>
               <span class="pick-path">{{ script.path }}</span>
+              <span class="pick-reason">matched: {{ script.entry_reason }}</span>
             </span>
           </label>
         </div>
@@ -439,6 +445,24 @@ onMounted(load);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.pick-reason {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--warning);
+}
+.picker-note {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background: rgba(255, 149, 0, 0.1);
+  border: 1px solid rgba(255, 149, 0, 0.22);
+  border-radius: 8px;
+  padding: 7px 9px;
+  margin-bottom: 10px;
+}
+.mono { font-family: monospace; }
 .dialog-actions {
   display: flex;
   justify-content: flex-end;

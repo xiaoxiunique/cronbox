@@ -9,7 +9,7 @@ use crate::db::Database;
 use crate::executor;
 use crate::models::*;
 use crate::scheduler;
-use crate::state::{scan_directory_entries, script_from_file, AppState};
+use crate::state::{entry_script_reason, scan_directory_entries, script_from_file, AppState};
 
 type CmdResult<T> = Result<T, String>;
 
@@ -324,6 +324,8 @@ fn create_agent_task(
             alias: name.trim().to_string(),
             language: ScriptLanguage::Bash,
             base_dir,
+            entry_reason: entry_script_reason(&script_path, ScriptLanguage::Bash)
+                .unwrap_or_default(),
         },
         full_path: script_path.to_string_lossy().to_string(),
     })

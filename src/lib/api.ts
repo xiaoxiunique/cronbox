@@ -23,6 +23,7 @@ export interface ScriptFile {
   alias: string;
   language: string;
   base_dir: string;
+  entry_reason: string;
 }
 
 export interface Schedule {

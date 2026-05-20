@@ -152,9 +152,7 @@ fn scan_recursive(base: &Path, dir: &Path, base_dir_str: &str, scripts: &mut Vec
 
 fn script_from_paths(base_dir: &Path, full_path: &Path, script_path: &str) -> Option<ScriptFile> {
     let language = ScriptLanguage::from_extension(full_path.to_str()?)?;
-    if !is_entry_script(full_path, language) {
-        return None;
-    }
+    let entry_reason = entry_script_reason(full_path, language)?;
     let name = full_path.file_name()?.to_string_lossy().to_string();
     let alias = default_script_alias(&name);
     Some(ScriptFile {
@@ -163,6 +161,7 @@ fn script_from_paths(base_dir: &Path, full_path: &Path, script_path: &str) -> Op
         alias,
         language,
         base_dir: base_dir.to_string_lossy().to_string(),
+        entry_reason,
     })
 }
 
@@ -176,11 +175,52 @@ pub fn default_script_alias(name: &str) -> String {
 }
 
 pub fn is_entry_script(path: &Path, language: ScriptLanguage) -> bool {
+    entry_script_reason(path, language).is_some()
+}
+
+/// Why a file was detected as a runnable entry script — every signal that
+/// matched, joined with " + ". `None` means it is not an entry script.
+///
+/// These signals are heuristics: a shebang is cosmetic and a Python `__main__`
+/// block is common in library modules too, so the reason is surfaced to the
+/// user rather than trusted blindly.
+pub fn entry_script_reason(path: &Path, language: ScriptLanguage) -> Option<String> {
+    let mut reasons: Vec<&str> = Vec::new();
     match language {
-        ScriptLanguage::Python => has_shebang(path) || has_python_main_guard(path),
-        ScriptLanguage::Bash => has_shebang(path) || is_executable(path),
-        ScriptLanguage::Bun => has_shebang(path) || has_js_entrypoint(path),
-        ScriptLanguage::PostgreSql => has_non_empty_content(path),
+        ScriptLanguage::Python => {
+            if has_shebang(path) {
+                reasons.push("shebang");
+            }
+            if has_python_main_guard(path) {
+                reasons.push("__main__ block");
+            }
+        }
+        ScriptLanguage::Bash => {
+            if has_shebang(path) {
+                reasons.push("shebang");
+            }
+            if is_executable(path) {
+                reasons.push("executable");
+            }
+        }
+        ScriptLanguage::Bun => {
+            if has_shebang(path) {
+                reasons.push("shebang");
+            }
+            if has_js_entrypoint(path) {
+                reasons.push("entrypoint marker");
+            }
+        }
+        ScriptLanguage::PostgreSql => {
+            if has_non_empty_content(path) {
+                reasons.push("non-empty SQL");
+            }
+        }
+    }
+    if reasons.is_empty() {
+        None
+    } else {
+        Some(reasons.join(" + "))
     }
 }
 

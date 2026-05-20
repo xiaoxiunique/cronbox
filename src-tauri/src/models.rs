@@ -168,6 +168,11 @@ pub struct ScriptFile {
     pub language: ScriptLanguage,
     /// The base working directory this script belongs to
     pub base_dir: String,
+    /// Why this file was detected as a runnable entry script (the matched
+    /// signals, e.g. "shebang + __main__ block"). Surfaced in the add-script
+    /// picker so the user can tell a real task from a library that merely
+    /// happens to have a `__main__` block.
+    pub entry_reason: String,
 }
 
 // ── Schedule (stored in DB) ──
