@@ -219,6 +219,66 @@ async fn execute_job(
         error.as_deref(),
         result.duration_ms,
     );
+
+    // Surface scheduled runs through a system notification — the user is not
+    // watching the app, and silent runs leave them guessing whether the job
+    // fired at all. Manual `run_now` / CLI `cronbox run` paths don't go
+    // through here, so ad-hoc tests aren't notified.
+    let alias = db
+        .get_script_alias(base_dir, script_path)
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| {
+            std::path::Path::new(script_path)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| script_path.to_string())
+        });
+    let body = if success {
+        format!("Completed in {}", fmt_duration_ms(result.duration_ms))
+    } else {
+        let msg = error.as_deref().unwrap_or("Failed").replace('\n', " ");
+        format!("Failed: {msg}")
+    };
+    notify_job_completion(&alias, &body);
+}
+
+fn fmt_duration_ms(ms: i64) -> String {
+    if ms < 1000 {
+        return format!("{ms}ms");
+    }
+    let secs = ms / 1000;
+    if secs < 60 {
+        return format!("{secs}s");
+    }
+    let m = secs / 60;
+    let r = secs % 60;
+    if r == 0 {
+        format!("{m}m")
+    } else {
+        format!("{m}m{r}s")
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn notify_job_completion(alias: &str, body: &str) {
+    let title = format!("CronBox · {alias}");
+    let script = format!(
+        r#"display notification "{}" with title "{}" sound name "default""#,
+        escape_applescript(body),
+        escape_applescript(&title),
+    );
+    let _ = std::process::Command::new("osascript")
+        .args(["-e", &script])
+        .spawn();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn notify_job_completion(_alias: &str, _body: &str) {}
+
+#[cfg(target_os = "macos")]
+fn escape_applescript(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 fn combined_logs(result: &crate::models::ExecutionResult) -> String {
