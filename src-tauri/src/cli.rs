@@ -288,6 +288,7 @@ fn run_schedules(args: &[String]) -> Result<i32, String> {
                 &add.cron_expr,
                 &add.timezone,
                 &add.args,
+                add.one_shot,
             )?;
             print_schedules(&[schedule]);
             Ok(0)
@@ -321,6 +322,7 @@ struct ScheduleAddArgs {
     cron_expr: String,
     timezone: String,
     args: String,
+    one_shot: bool,
 }
 
 fn parse_schedule_add_args(db: &Database, args: &[String]) -> Result<ScheduleAddArgs, String> {
@@ -339,6 +341,7 @@ fn parse_schedule_add_args(db: &Database, args: &[String]) -> Result<ScheduleAdd
                 cron_expr: cron_expr.clone(),
                 timezone,
                 args: parsed.args,
+                one_shot: parsed.one_shot,
             })
         }
         [base_dir, script_path, cron_expr] if parsed.base_dir.is_none() => Ok(ScheduleAddArgs {
@@ -347,8 +350,9 @@ fn parse_schedule_add_args(db: &Database, args: &[String]) -> Result<ScheduleAdd
             cron_expr: cron_expr.clone(),
             timezone,
             args: parsed.args,
+            one_shot: parsed.one_shot,
         }),
-        _ => Err("usage: cronbox schedules add <script-file> <cron> [--dir DIR] [--tz TZ] [--args JSON]\n       cronbox schedules add <base-dir> <script-path> <cron> [--tz TZ] [--args JSON]".to_string()),
+        _ => Err("usage: cronbox schedules add <script-file> <cron> [--dir DIR] [--tz TZ] [--args JSON] [--once]\n       cronbox schedules add <base-dir> <script-path> <cron> [--tz TZ] [--args JSON] [--once]".to_string()),
     }
 }
 
@@ -357,6 +361,7 @@ struct ParsedAddInput {
     base_dir: Option<String>,
     timezone: Option<String>,
     args: String,
+    one_shot: bool,
 }
 
 fn parse_add_positionals_and_options(args: &[String]) -> Result<ParsedAddInput, String> {
@@ -365,11 +370,15 @@ fn parse_add_positionals_and_options(args: &[String]) -> Result<ParsedAddInput, 
         base_dir: None,
         timezone: None,
         args: "{}".to_string(),
+        one_shot: false,
     };
 
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--once" | "--one-shot" => {
+                input.one_shot = true;
+            }
             "--args" => {
                 i += 1;
                 let value = args.get(i).ok_or("--args requires a JSON value")?;
@@ -473,6 +482,7 @@ fn create_schedule_from_cli(
     cron_expr: &str,
     timezone: &str,
     args: &str,
+    one_shot: bool,
 ) -> Result<Schedule, String> {
     let script_full_path = PathBuf::from(base_dir).join(script_path);
     if !script_full_path.exists() {
@@ -483,7 +493,15 @@ fn create_schedule_from_cli(
     let next = scheduler::calculate_next_run(cron_expr, timezone)?;
 
     let schedule = db
-        .create_schedule(script_path, base_dir, cron_expr, timezone, args, "{}")
+        .create_schedule(
+            script_path,
+            base_dir,
+            cron_expr,
+            timezone,
+            args,
+            "{}",
+            one_shot,
+        )
         .map_err(|e| e.to_string())?;
     db.update_schedule_next_run(&schedule.id, &next)
         .map_err(|e| e.to_string())?;
@@ -950,8 +968,8 @@ Usage:
   cronbox scripts list
 
   cronbox schedules list
-  cronbox schedules add <script-file> <cron> [--dir DIR] [--tz TZ] [--args JSON]
-  cronbox schedules add <base-dir> <script-path> <cron> [--tz TZ] [--args JSON]
+  cronbox schedules add <script-file> <cron> [--dir DIR] [--tz TZ] [--args JSON] [--once]
+  cronbox schedules add <base-dir> <script-path> <cron> [--tz TZ] [--args JSON] [--once]
   cronbox schedules enable <id-prefix>
   cronbox schedules disable <id-prefix>
   cronbox schedules delete <id-prefix>

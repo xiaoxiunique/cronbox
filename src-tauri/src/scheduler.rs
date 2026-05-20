@@ -129,6 +129,17 @@ async fn tick(db: &Arc<Mutex<Database>>, db_path: &Path) -> Result<(), String> {
             Err(e) => tracing::error!("Next run calc failed for {sid}: {e}"),
         }
 
+        // One-shot schedules disable themselves after their first trigger,
+        // even when the run was a skip (the trigger still fired once). The
+        // next tick won't pick this schedule up because get_due_schedules
+        // filters enabled = 1.
+        if schedule.one_shot {
+            let db = db.lock().map_err(|e| e.to_string())?;
+            if let Err(err) = db.set_schedule_enabled(&sid, false) {
+                tracing::error!("disable one_shot {sid}: {err}");
+            }
+        }
+
         let db_path = db_path.to_path_buf();
         let bd = schedule.base_dir.clone();
         let sp = schedule.script_path.clone();

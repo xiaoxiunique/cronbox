@@ -27,6 +27,7 @@ const editCronExpr = ref("0 * * * *");
 const editTimezone = ref("Asia/Shanghai");
 const editArgs = ref("{}");
 const editEnvPairs = ref<{ key: string; value: string }[]>([]);
+const editOneShot = ref(false);
 const editCronError = ref("");
 const editError = ref("");
 const editUpcoming = ref<string[]>([]);
@@ -260,6 +261,7 @@ function openEditDialog(s: ScriptFile) {
   editTimezone.value = schedule?.timezone ?? "Asia/Shanghai";
   editArgs.value = schedule?.args ?? "{}";
   editEnvPairs.value = envToPairs(schedule?.env ?? "{}");
+  editOneShot.value = schedule?.one_shot ?? false;
   editCronError.value = "";
   editError.value = "";
   editUpcoming.value = [];
@@ -307,11 +309,12 @@ async function saveEdit() {
         editCronExpr.value,
         editTimezone.value,
         scheduleArgs,
-        envJson
+        envJson,
+        editOneShot.value
       );
       await api.setScheduleEnabled(updated.id, editScheduleEnabled.value);
     } else if (editScheduleEnabled.value) {
-      await api.createSchedule(script.path, script.base_dir, editCronExpr.value, editTimezone.value, scheduleArgs, envJson);
+      await api.createSchedule(script.path, script.base_dir, editCronExpr.value, editTimezone.value, scheduleArgs, envJson, editOneShot.value);
     }
     showEditDialog.value = false;
     await load();
@@ -383,6 +386,7 @@ onUnmounted(stopPolling);
             <div class="schedule-badge" v-if="getSchedule(s.path, s.base_dir)">
               <span :class="['dot', getSchedule(s.path, s.base_dir)!.enabled ? 'on' : 'off']"></span>
               {{ getSchedule(s.path, s.base_dir)!.cron_expr }}
+              <span class="once-tag" v-if="getSchedule(s.path, s.base_dir)!.one_shot">once</span>
               <span class="next" v-if="getSchedule(s.path, s.base_dir)!.next_run_at">
                 {{ shortTime(getSchedule(s.path, s.base_dir)!.next_run_at) }}
               </span>
@@ -458,6 +462,10 @@ onUnmounted(stopPolling);
           <div v-if="editCronError" class="error">{{ editCronError }}</div>
           <label>Timezone</label>
           <input v-model="editTimezone" @input="checkEditCron" :disabled="editScheduleFieldsDisabled" />
+          <label class="inline-check">
+            <input type="checkbox" v-model="editOneShot" :disabled="editScheduleFieldsDisabled" />
+            <span>Run once (disable after first run)</span>
+          </label>
           <label>Arguments (JSON)</label>
           <textarea v-model="editArgs" class="mono" rows="4" :disabled="editScheduleFieldsDisabled"></textarea>
           <label>Environment Variables</label>
@@ -693,6 +701,31 @@ onUnmounted(stopPolling);
 .dot.on { background: var(--success); box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.12); }
 .dot.off { background: var(--text-secondary); }
 .next { color: var(--warning); }
+.once-tag {
+  font-size: 10px;
+  font-weight: 650;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 1px 6px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.inline-check {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 4px !important;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.inline-check input {
+  width: auto !important;
+  margin: 0;
+  accent-color: var(--accent);
+}
 
 .btn {
   padding: 5px 10px;

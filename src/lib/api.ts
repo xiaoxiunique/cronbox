@@ -35,6 +35,7 @@ export interface Schedule {
   args: string;
   env: string;
   enabled: boolean;
+  one_shot: boolean;
   next_run_at: string | null;
   last_run_at: string | null;
   created_at: string;
@@ -112,11 +113,11 @@ export const api = {
   createClaudeTask: (name: string, prompt: string, baseDir: string = "") =>
     invoke<CreatedCodexTask>("create_claude_task", { name, prompt, baseDir }),
 
-  createSchedule: (scriptPath: string, baseDir: string, cronExpr: string, timezone: string, args: string, env: string = "{}") =>
-    invoke<Schedule>("create_schedule", { scriptPath, baseDir, cronExpr, timezone, args, env }),
+  createSchedule: (scriptPath: string, baseDir: string, cronExpr: string, timezone: string, args: string, env: string = "{}", oneShot: boolean = false) =>
+    invoke<Schedule>("create_schedule", { scriptPath, baseDir, cronExpr, timezone, args, env, oneShot }),
   listSchedules: () => invoke<Schedule[]>("list_schedules"),
-  updateSchedule: (id: string, cronExpr?: string, timezone?: string, args?: string, env?: string) =>
-    invoke<Schedule>("update_schedule", { id, cronExpr, timezone, args, env }),
+  updateSchedule: (id: string, cronExpr?: string, timezone?: string, args?: string, env?: string, oneShot?: boolean) =>
+    invoke<Schedule>("update_schedule", { id, cronExpr, timezone, args, env, oneShot }),
   setScheduleEnabled: (id: string, enabled: boolean) =>
     invoke<void>("set_schedule_enabled", { id, enabled }),
   deleteSchedule: (id: string) => invoke<boolean>("delete_schedule", { id }),

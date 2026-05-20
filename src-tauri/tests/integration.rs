@@ -231,6 +231,7 @@ mod integration_tests {
                     "UTC",
                     "{}",
                     "{}",
+                    false,
                 )
                 .unwrap();
             let next = cronbox_lib::scheduler::calculate_next_run("0 * * * *", "UTC").unwrap();

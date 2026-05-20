@@ -190,6 +190,9 @@ pub struct Schedule {
     /// Per-schedule environment variables as a JSON object of string→string.
     pub env: String,
     pub enabled: bool,
+    /// If true, the schedule disables itself after firing once. Useful for
+    /// "remind me tomorrow at 9am" style one-shot tasks.
+    pub one_shot: bool,
     pub next_run_at: Option<String>,
     pub last_run_at: Option<String>,
     pub created_at: String,

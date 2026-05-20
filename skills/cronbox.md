@@ -60,6 +60,11 @@ Make the script self-contained:
 
 ## Step 2 — Register the script and add a schedule
 
+### Recurring vs one-shot
+
+- **Recurring** is the default — the task fires every time the cron matches.
+- **One-shot** (`--once`) — the task fires exactly **once** at the next cron match, then disables itself. Use this when the user says "tomorrow morning…", "in 5 minutes…", "next Monday…", "just once", "remind me to…". For "in N minutes" use a wide cron like `* * * * *` so it fires at the next minute boundary, then stops; for "tomorrow at 9am" use `0 9 * * *` so the next 9am fires it once.
+
 ```bash
 # Register the script with a short human description (~5-8 words).
 # The description shows in CronBox's UI in place of the filename, so the user
@@ -70,6 +75,7 @@ cronbox add /abs/path/to/scripts/my-task.sh \
   --alias "Daily funding rate snapshot"
 
 # Create a schedule. 5-field cron, explicit timezone.
+# Add --once for a one-shot ("tomorrow at 9am", "in 5 minutes", "next Monday").
 cronbox schedules add \
   /abs/path/to/scripts/my-task.sh \
   "0 9 * * *" \
@@ -101,7 +107,7 @@ In your final reply: state (a) the script path you created, (b) the cron express
 | Register a script file (manual mode) | `cronbox add <abs-script> --alias "<desc>"` |
 | Register a directory and pick scripts | `cronbox add <dir> --include <rel-script>` (repeatable) or `--all` |
 | List visible scripts | `cronbox scripts list` |
-| Create schedule | `cronbox schedules add <abs-script> "<cron>" --tz <tz> [--args <json>]` |
+| Create schedule | `cronbox schedules add <abs-script> "<cron>" --tz <tz> [--args <json>] [--once]` |
 | List schedules | `cronbox schedules list` |
 | Enable / disable | `cronbox schedules enable <id-or-path>` / `disable` |
 | Delete schedule | `cronbox schedules delete <id-or-path>` |
