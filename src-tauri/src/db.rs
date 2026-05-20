@@ -519,6 +519,23 @@ impl Database {
         Ok(count > 0)
     }
 
+    /// Reconcile any queued/running jobs left from a previous process. Call
+    /// this at GUI startup — a fresh process cannot have in-flight jobs, so
+    /// anything still in those statuses is a zombie from when CronBox was
+    /// interrupted mid-run. They are marked as cancelled with an explicit
+    /// reason so the tray, dashboard, and skip-if-active logic all see them
+    /// as done.
+    pub fn mark_interrupted_running_jobs(&self) -> SqlResult<usize> {
+        let now = chrono::Utc::now().to_rfc3339();
+        let reason = "Interrupted: CronBox stopped while this job was running";
+        let count = self.conn.execute(
+            "UPDATE jobs SET status = 'cancelled', error = ?1, completed_at = ?2
+             WHERE status IN ('running', 'queued')",
+            params![reason, now],
+        )?;
+        Ok(count)
+    }
+
     pub fn cleanup_old_jobs(&self, days: u32) -> SqlResult<usize> {
         let cutoff = chrono::Utc::now() - chrono::Duration::days(days as i64);
         let count = self.conn.execute(
@@ -703,6 +720,32 @@ mod tests {
         db.mark_job_completed(&j.id, true, None, "", None, 10)
             .unwrap();
         assert!(db.list_running_jobs().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_mark_interrupted_running_jobs() {
+        let db = Database::open_in_memory().unwrap();
+        let queued = db.create_job(None, "a.sh", "/tmp", "{}", None).unwrap();
+        let running = db.create_job(None, "b.sh", "/tmp", "{}", None).unwrap();
+        db.mark_job_running(&running.id).unwrap();
+        let done = db.create_job(None, "c.sh", "/tmp", "{}", None).unwrap();
+        db.mark_job_completed(&done.id, true, None, "", None, 1)
+            .unwrap();
+
+        let swept = db.mark_interrupted_running_jobs().unwrap();
+        assert_eq!(swept, 2);
+
+        assert_eq!(db.get_job(&queued.id).unwrap().status, JobStatus::Cancelled);
+        assert_eq!(
+            db.get_job(&running.id).unwrap().status,
+            JobStatus::Cancelled
+        );
+        assert_eq!(db.get_job(&done.id).unwrap().status, JobStatus::Success);
+        let err = db.get_job(&running.id).unwrap().error.unwrap_or_default();
+        assert!(err.contains("Interrupted"), "got: {err}");
+
+        // Idempotent: nothing left to mark on a second pass.
+        assert_eq!(db.mark_interrupted_running_jobs().unwrap(), 0);
     }
 
     #[test]

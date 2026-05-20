@@ -17,6 +17,15 @@ impl AppState {
             std::fs::create_dir_all(parent).map_err(|e| format!("Cannot create data dir: {e}"))?;
         }
         let database = Database::open(&db_path).map_err(|e| e.to_string())?;
+        let interrupted = database
+            .mark_interrupted_running_jobs()
+            .map_err(|e| e.to_string())?;
+        if interrupted > 0 {
+            tracing::info!(
+                "Marked {} interrupted job(s) from a previous run",
+                interrupted
+            );
+        }
         scheduler::initialize_schedule_times(&database)?;
 
         Ok(Self {
