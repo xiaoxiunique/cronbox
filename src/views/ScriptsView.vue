@@ -9,7 +9,6 @@ import { formatDuration } from "../lib/format";
 const scripts = ref<ScriptFile[]>([]);
 const schedules = ref<Schedule[]>([]);
 const workDirs = ref<WorkDir[]>([]);
-const copiedDir = ref("");
 
 // Run panel
 const runningJob = ref<Job | null>(null);
@@ -51,24 +50,12 @@ function isAgentTask(s: ScriptFile): boolean {
   return s.path.startsWith("cronbox/codex/") || s.path.startsWith("cronbox/claude/");
 }
 
-const agentTaskGroups = computed(() => {
-  const groups: Record<string, ScriptFile[]> = {};
-  for (const s of scripts.value) if (isAgentTask(s)) (groups[s.base_dir] ??= []).push(s);
-  return groups;
-});
-
-const codeScriptGroups = computed(() => {
-  const groups: Record<string, ScriptFile[]> = {};
-  for (const s of scripts.value) if (!isAgentTask(s)) (groups[s.base_dir] ??= []).push(s);
-  return groups;
-});
-
 const taskSections = computed(() => {
-  const sections: { kind: string; title: string; groups: Record<string, ScriptFile[]>; count: number }[] = [];
-  const agentCount = scripts.value.filter(isAgentTask).length;
-  if (agentCount > 0) sections.push({ kind: "agent", title: "Agent Tasks", groups: agentTaskGroups.value, count: agentCount });
-  const codeCount = scripts.value.length - agentCount;
-  if (codeCount > 0) sections.push({ kind: "code", title: "Code Scripts", groups: codeScriptGroups.value, count: codeCount });
+  const sections: { kind: string; title: string; scripts: ScriptFile[] }[] = [];
+  const agents = scripts.value.filter(isAgentTask);
+  if (agents.length > 0) sections.push({ kind: "agent", title: "Agent Tasks", scripts: agents });
+  const codes = scripts.value.filter((s) => !isAgentTask(s));
+  if (codes.length > 0) sections.push({ kind: "code", title: "Code Scripts", scripts: codes });
   return sections;
 });
 
@@ -347,20 +334,8 @@ function shortTime(iso: string | null) {
   return mins > 0 ? `in ${mins}m` : `${-mins}m ago`;
 }
 
-function dirName(path: string) {
-  return path.split("/").pop() || path;
-}
-
 function detailUrl(s: ScriptFile) {
   return { path: "/scripts/detail", query: { path: s.path, baseDir: s.base_dir } };
-}
-
-async function copyDirPath(path: string) {
-  await navigator.clipboard.writeText(path);
-  copiedDir.value = path;
-  window.setTimeout(() => {
-    if (copiedDir.value === path) copiedDir.value = "";
-  }, 1400);
 }
 
 onMounted(load);
@@ -394,28 +369,15 @@ onUnmounted(stopPolling);
       <section v-for="section in taskSections" :key="section.kind" class="task-section">
         <div class="task-section-head">
           <span>{{ section.title }}</span>
-          <span class="task-section-count">{{ section.count }}</span>
-        </div>
-        <div v-for="(group, baseDir) in section.groups" :key="baseDir" class="dir-group">
-        <div class="dir-header">
-          <span class="dir-icon">📁</span>
-          <span class="dir-name">{{ dirName(baseDir as string) }}</span>
-          <span class="dir-count">{{ group.length }}</span>
-          <button
-            :class="['dir-path-full', { copied: copiedDir === baseDir }]"
-            title="Copy directory path"
-            @click="copyDirPath(baseDir as string)"
-          >
-            {{ baseDir }}
-          </button>
+          <span class="task-section-count">{{ section.scripts.length }}</span>
         </div>
         <div class="list">
-          <div v-for="s in group" :key="s.base_dir + '/' + s.path"
+          <div v-for="s in section.scripts" :key="s.base_dir + '/' + s.path"
             :class="['row', { active: runScriptPath === s.path && runBaseDir === s.base_dir && runningJob }]">
             <LanguageLogo :language="s.language" />
             <router-link :to="detailUrl(s)" class="info script-link">
               <div class="name">{{ s.alias }}</div>
-              <div class="path">{{ s.path }}</div>
+              <div class="full-path">{{ s.base_dir }}/{{ s.path }}</div>
             </router-link>
             <button @click="openEditDialog(s)" class="btn config-btn" title="Edit script settings">⚙</button>
             <div class="schedule-badge" v-if="getSchedule(s.path, s.base_dir)">
@@ -432,7 +394,6 @@ onUnmounted(stopPolling);
             <button @click="quickRun(s)" class="btn quick-run" title="Quick run (no args)"
               :disabled="runningJob?.status === 'running' && runScriptPath === s.path && runBaseDir === s.base_dir">⚡</button>
           </div>
-        </div>
         </div>
       </section>
 
@@ -661,53 +622,6 @@ onUnmounted(stopPolling);
   font-weight: 650;
 }
 
-.dir-group { margin-bottom: 16px; }
-.dir-header {
-  font-size: 13px;
-  font-weight: 650;
-  margin: 0 0 7px;
-  padding: 0 2px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text);
-}
-.dir-icon { font-size: 14px; }
-.dir-name { white-space: nowrap; }
-.dir-count {
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 650;
-  background: var(--bg-soft);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 1px 6px;
-}
-.dir-path-full {
-  min-width: 0;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-family: monospace;
-  font-size: 11px;
-  font-weight: 400;
-  overflow: hidden;
-  padding: 2px 5px;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.dir-path-full:hover,
-.dir-path-full:focus-visible {
-  background: var(--bg-soft);
-  border-color: var(--border);
-  color: var(--text);
-  outline: none;
-}
-.dir-path-full.copied { color: var(--success); border-color: rgba(52, 199, 89, 0.22); }
-
 .list { display: flex; flex-direction: column; gap: 5px; }
 .row {
   display: flex;
@@ -741,7 +655,23 @@ onUnmounted(stopPolling);
 }
 .script-link:hover .name { color: var(--accent); }
 .name { font-weight: 600; font-size: 13px; }
-.path { font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.full-path {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-height: 0;
+  opacity: 0;
+  margin-top: 0;
+  transition: opacity 0.15s ease, max-height 0.15s ease, margin-top 0.15s ease;
+}
+.row:hover .full-path {
+  max-height: 16px;
+  opacity: 1;
+  margin-top: 2px;
+}
 
 .schedule-badge {
   display: flex;
