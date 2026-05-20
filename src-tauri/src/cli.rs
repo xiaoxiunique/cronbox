@@ -129,13 +129,19 @@ fn run_add(args: &[String]) -> Result<i32, String> {
     let path_buf = PathBuf::from(&add.path);
     if path_buf.is_file() {
         if add.all || !add.includes.is_empty() {
-            return Err("usage: cronbox add <script-file>".to_string());
+            return Err("usage: cronbox add <script-file> [--alias '<desc>']".to_string());
         }
-        return add_script_file_from_cli(&path_buf);
+        return add_script_file_from_cli(&path_buf, add.alias.as_deref());
     }
 
     if !path_buf.is_dir() {
         return Err(format!("not found: {}", add.path));
+    }
+    if add.alias.is_some() {
+        return Err(
+            "--alias only applies to the single-file form: cronbox add <script-file> --alias '<desc>'"
+                .to_string(),
+        );
     }
 
     let canonical_path = fs::canonicalize(&path_buf)
@@ -189,12 +195,14 @@ struct CliAddArgs {
     path: String,
     all: bool,
     includes: Vec<String>,
+    alias: Option<String>,
 }
 
 fn parse_cli_add_args(args: &[String]) -> Result<CliAddArgs, String> {
     let mut path = None;
     let mut all = false;
     let mut includes = Vec::new();
+    let mut alias: Option<String> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -207,13 +215,20 @@ fn parse_cli_add_args(args: &[String]) -> Result<CliAddArgs, String> {
                     .ok_or("--include requires a relative script path")?;
                 includes.push(value.clone());
             }
+            "--alias" | "--name" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or("--alias requires a short human description")?;
+                alias = Some(value.clone());
+            }
             value if value.starts_with("--") => {
                 return Err(format!("unknown add option: {value}"));
             }
             value => {
                 if path.is_some() {
                     return Err(
-                        "usage: cronbox add <script-file>\n       cronbox add <directory> [--include SCRIPT] [--all]"
+                        "usage: cronbox add <script-file> [--alias '<desc>']\n       cronbox add <directory> [--include SCRIPT] [--all]"
                             .to_string(),
                     );
                 }
@@ -225,14 +240,15 @@ fn parse_cli_add_args(args: &[String]) -> Result<CliAddArgs, String> {
 
     Ok(CliAddArgs {
         path: path.ok_or(
-            "usage: cronbox add <script-file>\n       cronbox add <directory> [--include SCRIPT] [--all]",
+            "usage: cronbox add <script-file> [--alias '<desc>']\n       cronbox add <directory> [--include SCRIPT] [--all]",
         )?,
         all,
         includes,
+        alias,
     })
 }
 
-fn add_script_file_from_cli(path: &Path) -> Result<i32, String> {
+fn add_script_file_from_cli(path: &Path, alias: Option<&str>) -> Result<i32, String> {
     let script = script_from_file(path)
         .ok_or_else(|| format!("file is not an executable entry script: {}", path.display()))?;
     let db = open_db()?;
@@ -241,8 +257,17 @@ fn add_script_file_from_cli(path: &Path) -> Result<i32, String> {
         .map_err(|e| e.to_string())?;
     db.add_script_entry(&dir.path, &script.path)
         .map_err(|e| e.to_string())?;
+    if let Some(alias) = alias.map(str::trim).filter(|a| !a.is_empty()) {
+        db.set_script_alias(&dir.path, &script.path, Some(alias))
+            .map_err(|e| e.to_string())?;
+    }
+    let resolved = db.get_script_alias(&dir.path, &script.path).ok().flatten();
+    let mut final_script = script;
+    if let Some(a) = resolved {
+        final_script.alias = a;
+    }
     println!("added script:");
-    print_scripts(&[script]);
+    print_scripts(&[final_script]);
     Ok(0)
 }
 
@@ -913,7 +938,7 @@ fn print_help() {
 
 Usage:
   cronbox help
-  cronbox add <script-file>
+  cronbox add <script-file> [--alias DESC]
   cronbox add <directory> [--include SCRIPT] [--all]
   cronbox install-cli [--target PATH] [--force]
   cronbox cli-status

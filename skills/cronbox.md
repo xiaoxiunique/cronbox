@@ -61,10 +61,13 @@ Make the script self-contained:
 ## Step 2 — Register the script and add a schedule
 
 ```bash
-# Register the script file. Idempotent — safe to re-run.
-# This adds the script's parent directory in MANUAL mode and registers just
-# this one file, so the rest of the user's codebase is not pulled in.
-cronbox add /abs/path/to/scripts/my-task.sh
+# Register the script with a short human description (~5-8 words).
+# The description shows in CronBox's UI in place of the filename, so the user
+# can scan their list and tell at a glance what each task does.
+# This also adds the script's parent directory in MANUAL mode and registers
+# just this one file, so the rest of the user's codebase is not pulled in.
+cronbox add /abs/path/to/scripts/my-task.sh \
+  --alias "Daily funding rate snapshot"
 
 # Create a schedule. 5-field cron, explicit timezone.
 cronbox schedules add \
@@ -95,7 +98,7 @@ In your final reply: state (a) the script path you created, (b) the cron express
 | Operation | Command |
 |---|---|
 | Self-check (CLI + DB) | `cronbox dirs list` |
-| Register a script file (manual mode) | `cronbox add <abs-script>` |
+| Register a script file (manual mode) | `cronbox add <abs-script> --alias "<desc>"` |
 | Register a directory and pick scripts | `cronbox add <dir> --include <rel-script>` (repeatable) or `--all` |
 | List visible scripts | `cronbox scripts list` |
 | Create schedule | `cronbox schedules add <abs-script> "<cron>" --tz <tz> [--args <json>]` |
@@ -108,17 +111,21 @@ In your final reply: state (a) the script path you created, (b) the cron express
 ## Conventions
 
 - **Always use absolute paths** for `cronbox add` and `cronbox schedules add`. AI cwd assumptions are flaky; absolute paths are unambiguous.
+- **Always pass `--alias '<one-line description>'`** when registering a script. The user scans their CronBox list to know what each task is — `funding_check.sh` tells them nothing, `Daily funding rate snapshot` does.
 - **Always pass `--tz`** explicitly. Don't rely on the user's default.
 - **Project-local scripts**, not `~/.cronbox`. The user wants them in their repo.
 - **Test once before scheduling**: `cronbox run <dir> <script-rel>` to confirm the script works in CronBox's environment before committing to a cron. CronBox resolves the user's login-shell PATH at startup so `bun`/`uv`/`jq` etc. should be available.
 
-## Notifications — be honest
+## Notifications
 
-CronBox **does not yet have a built-in notify primitive**. If the user wants to be notified on failure or success, wire it inside the script and tell them what you wired:
+CronBox **automatically sends a macOS notification when a scheduled job completes** — success or failure, with the script's alias as the title and the duration or error as the body. The user does not need to wire this themselves.
 
-- macOS desktop: `osascript -e 'display notification "msg" with title "Title"'`
-- Webhook (Slack / Discord / Telegram): `curl -X POST <url> -d '{"text":"..."}'`
-- Email: whatever the user already has set up (`mail`, `msmtp`, etc.).
+The auto-notification only fires for **scheduled** runs (cron-triggered). Ad-hoc `cronbox run` invocations stay silent so testing doesn't spam.
+
+If the user wants extra notifications beyond the built-in macOS one — push to Slack/Discord/Telegram, email, etc. — wire them inside the script and tell the user what you wired:
+
+- Webhook: `curl -X POST <url> -d '{"text":"..."}'`
+- Email: `mail` / `msmtp` / whatever the user already has.
 
 ## Failure modes to recognize
 
