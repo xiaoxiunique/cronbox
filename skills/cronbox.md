@@ -23,7 +23,28 @@ cronbox dirs list
 
 ## Step 1 — Write the script in the user's project
 
-Drop the actual work script **into the user's current project**, not into `~/.cronbox`. The user wants scripts version-controlled in their repo. Pick a sensible relative path like `scripts/<name>.{sh,py,ts}`.
+### Choose the script's form first
+
+Two valid shapes — pick based on what the task actually needs each time:
+
+- **Deterministic script** — same logic every tick (fetch a URL, run a query, copy files, send a webhook). Write bash/python/bun/SQL. Most "every X minutes/hours/days" tasks are this.
+- **AI-at-runtime** — the task needs *ongoing judgment* (summarize the repo, code-review the latest diff, write a status note from changing context, decide whether to alert based on current state). Make the script body invoke an AI agent with the prompt embedded:
+
+  ```bash
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd /abs/path/to/project
+  claude -p "<the prompt the task needs each time>" --output-format text
+  # or: codex exec "<prompt>"
+  ```
+
+  CronBox treats this as a normal script — captures stdout as logs, marks failure on non-zero exit, respects the schedule. The judgment happens inside the agent at runtime.
+
+Pick **AI-at-runtime** when "what to do" depends on current state that can't be enumerated up front (changing files, latest commits, recent logs, evolving conditions). Pick **deterministic** otherwise — it's cheaper, faster, and easier to reason about.
+
+### Write the file
+
+Drop the script **into the user's current project**, not into `~/.cronbox`. The user wants scripts version-controlled in their repo. Pick a sensible relative path like `scripts/<name>.{sh,py,ts}`.
 
 Supported languages (auto-detected by extension):
 
