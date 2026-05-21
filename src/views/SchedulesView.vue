@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { api, type Schedule } from "../lib/api";
+import { api, type Schedule, type ScriptFile } from "../lib/api";
 
 const schedules = ref<Schedule[]>([]);
+const scripts = ref<ScriptFile[]>([]);
 
 async function load() {
-  schedules.value = await api.listSchedules();
+  const [s, scs] = await Promise.all([api.listSchedules(), api.scanScripts()]);
+  schedules.value = s;
+  scripts.value = scs;
 }
 
 async function toggle(id: string, enabled: boolean) {
@@ -17,6 +20,14 @@ async function remove(id: string) {
   if (!confirm("Delete this schedule?")) return;
   await api.deleteSchedule(id);
   await load();
+}
+
+function aliasFor(s: Schedule): string {
+  const match = scripts.value.find(
+    (sc) => sc.base_dir === s.base_dir && sc.path === s.script_path
+  );
+  if (match?.alias) return match.alias;
+  return s.script_path.split("/").pop() || s.script_path;
 }
 
 function shortTime(iso: string | null) {
@@ -56,14 +67,14 @@ onMounted(load);
           <span class="slider"></span>
         </label>
         <div class="info">
-          <router-link :to="detailUrl(s)" class="script-path script-link">{{ s.script_path }}</router-link>
+          <router-link :to="detailUrl(s)" class="alias script-link">{{ aliasFor(s) }}</router-link>
           <div class="meta">
-            <span class="base-dir">📁 {{ s.base_dir.split('/').pop() }}</span>
             <span class="cron">{{ s.cron_expr }}</span>
-            <span class="tz">{{ s.timezone }}</span>
-            <span class="next" v-if="s.next_run_at">Next: {{ shortTime(s.next_run_at) }}</span>
+            <span class="once-tag" v-if="s.one_shot">once</span>
           </div>
+          <div class="full-path">{{ s.base_dir }}/{{ s.script_path }}</div>
         </div>
+        <span class="next" v-if="s.next_run_at">{{ shortTime(s.next_run_at) }}</span>
         <button @click="remove(s.id)" class="btn-icon del">✕</button>
       </div>
     </div>
@@ -107,7 +118,7 @@ onMounted(load);
   box-shadow: var(--glass-shadow-soft), var(--glass-highlight);
 }
 .info { flex: 1; min-width: 0; }
-.script-path { font-weight: 600; font-size: 14px; }
+.alias { font-weight: 600; font-size: 14px; }
 .script-link {
   display: inline-block;
   max-width: 100%;
@@ -119,18 +130,49 @@ onMounted(load);
   border-radius: 7px;
 }
 .script-link:hover { color: var(--accent); }
-.meta { display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
-.base-dir,
-.cron,
-.tz,
-.next {
-  background: var(--bg-soft);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 2px 7px;
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 .cron { font-family: monospace; }
-.next { color: var(--warning); }
+.once-tag {
+  font-size: 10px;
+  font-weight: 650;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 1px 6px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.full-path {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-height: 0;
+  opacity: 0;
+  margin-top: 0;
+  transition: opacity 0.15s ease, max-height 0.15s ease, margin-top 0.15s ease;
+}
+.row:hover .full-path {
+  max-height: 16px;
+  opacity: 1;
+  margin-top: 3px;
+}
+.next {
+  font-size: 12px;
+  color: var(--warning);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 .btn-icon {
   border: 1px solid var(--border);
   background: var(--bg-soft);
