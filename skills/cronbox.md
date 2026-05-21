@@ -119,6 +119,7 @@ In your final reply: state (a) the script path you created, (b) the cron express
 - **Always use absolute paths** for `cronbox add` and `cronbox schedules add`. AI cwd assumptions are flaky; absolute paths are unambiguous.
 - **Always pass `--alias '<one-line description>'`** when registering a script. The user scans their CronBox list to know what each task is — `funding_check.sh` tells them nothing, `Daily funding rate snapshot` does.
 - **Always pass `--tz`** explicitly. Don't rely on the user's default.
+- **Consolidate "N fixed times a day" into ONE schedule.** Cron supports comma lists — `0 9,12,15,18,21 * * *` fires at five times of day from a single schedule. Same idea for weekdays (`0 9 * * 1,3,5`) and dates (`0 9 1,15 * *`). **Never** create one schedule per time — it floods the user's list with near-duplicate rows.
 - **Project-local scripts**, not `~/.cronbox`. The user wants them in their repo.
 - **Test once before scheduling**: `cronbox run <dir> <script-rel>` to confirm the script works in CronBox's environment before committing to a cron. CronBox resolves the user's login-shell PATH at startup so `bun`/`uv`/`jq` etc. should be available.
 
