@@ -16,6 +16,7 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "tauri": "tauri",
+    "install-macos": "bash scripts/install-macos.sh",
     "install-cli": "bash scripts/install-cli.sh"
   },
   "dependencies": {

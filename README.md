@@ -2,7 +2,7 @@
 
 CronBox is a local-first menu bar scheduler for scripts and coding-agent tasks.
 
-It scans folders for executable entry scripts, lets you run them manually or on a cron schedule, and keeps run history with live logs in one place. Scheduled jobs keep running while the main window is closed, as long as CronBox is still active in the menu bar.
+It scans folders for executable entry scripts, lets you run them manually or on recurring and one-shot schedules, and keeps run history with live logs in one place. Scheduled jobs keep running while the main window is closed, as long as CronBox is still active in the menu bar.
 
 ## Status
 
@@ -11,12 +11,13 @@ CronBox is early-stage software. Expect rough edges around packaging, platform-s
 ## Features
 
 - Add script directories and only surface files with executable entrypoints.
-- Schedule Bash, Python, Bun, PostgreSQL, Codex, and Claude task scripts.
-- Keep aliases, cron expressions, timezone, args, enabled state, and history per script.
+- Schedule Bash, Python, Bun, PostgreSQL, Codex, and Claude task scripts as recurring jobs or one-shot runs.
+- Keep aliases, cron expressions, timezone, JSON args, enabled state, one-shot state, and history per script.
 - View run history and logs in a two-pane detail view.
 - Stream stdout and stderr while a job is running.
 - Skip a scheduled run when the previous run for the same schedule is still queued or running.
-- Manage directories, schedules, jobs, and manual runs from the `cronbox` CLI.
+- Send macOS notifications when scheduled jobs complete.
+- Manage directories, selected script entries, schedules, jobs, agent skills, and manual runs from the `cronbox` CLI.
 - Create Codex and Claude Code task scripts in the default `~/.cronbox` workspace.
 
 ## Development
@@ -47,6 +48,20 @@ cd src-tauri
 cargo test
 ```
 
+## Installation
+
+Install the latest published macOS release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/xiaoxiunique/cronbox/main/scripts/install-macos.sh | bash
+```
+
+The installer copies `CronBox.app` to `/Applications` and links the `cronbox` CLI into a writable bin directory such as `/opt/homebrew/bin`, `/usr/local/bin`, or `~/.local/bin`. To install a specific tag, set `CRONBOX_VERSION`, for example:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/xiaoxiunique/cronbox/main/scripts/install-macos.sh | env CRONBOX_VERSION=v0.1.0 bash
+```
+
 ## Packaging
 
 GitHub Actions builds installers for macOS, Linux, and Windows.
@@ -75,13 +90,17 @@ Common commands:
 
 ```bash
 cronbox add ~/scripts
+cronbox add ~/scripts --include daily-report.sh
+cronbox add ~/scripts/cleanup.sh --alias "Clean temporary files"
 cronbox scripts list
 cronbox schedules add ./daily-report.sh "0 9 * * *" --tz Asia/Shanghai
+cronbox schedules add ./reminder.sh "* * * * *" --once
 cronbox jobs list
 cronbox run ~/scripts daily-report.sh --args '{"date":"today"}'
+cronbox skills install
 ```
 
-`cronbox add <directory>` scans the directory and reports only scripts with executable entrypoints. If nothing can be added, the CLI and UI both make that explicit.
+`cronbox add <directory>` previews only scripts with executable entrypoints. Use `--include <relative-script>` to add selected entries, repeat `--include` for several scripts, or use `--all` for script directories where every entrypoint should be registered. `cronbox schedules add ... --once` creates a one-shot schedule that disables itself after its first trigger.
 
 ## Agent Tasks
 
@@ -93,9 +112,15 @@ CronBox can generate local task scripts for Codex and Claude Code. By default th
 
 The workspace includes `AGENTS.md` and `CLAUDE.md` so you can keep durable rules for scheduled coding-agent tasks.
 
+To install the bundled Claude Code skill for scheduling recurring local tasks through CronBox, run:
+
+```bash
+cronbox skills install
+```
+
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Please report security issues through the private channel described in [SECURITY.md](SECURITY.md).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before opening a pull request. Please report security issues through the private channel described in [SECURITY.md](SECURITY.md).
 
 ## License
 

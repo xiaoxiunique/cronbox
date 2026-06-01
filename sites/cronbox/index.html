@@ -6,24 +6,27 @@
     <title>CronBox - 本地优先的脚本调度器</title>
     <meta
       name="description"
-      content="CronBox 是一个本地优先的菜单栏调度器，用来管理脚本、cron job 和 coding agent 任务。"
+      content="CronBox 是一个本地优先的 macOS 菜单栏调度器，用来管理脚本、cron job 和 coding agent 任务。"
     />
     <style>
       :root {
-        color-scheme: dark;
-        --ink: #f6f0e8;
-        --muted: #b8b1a8;
-        --quiet: #7f7a73;
-        --paper: #161412;
-        --panel: rgba(33, 30, 27, 0.72);
-        --panel-strong: rgba(48, 43, 38, 0.82);
-        --line: rgba(255, 255, 255, 0.14);
-        --line-strong: rgba(255, 255, 255, 0.24);
-        --amber: #f4b84a;
-        --mint: #6fe3b1;
-        --blue: #75a7ff;
-        --red: #ff7c66;
-        --shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+        color-scheme: light;
+        --ink: #17201d;
+        --muted: #66716c;
+        --quiet: #8c9691;
+        --paper: #f3f5f1;
+        --surface: #fbfcf8;
+        --surface-2: #e7ece5;
+        --line: #d2d9d1;
+        --line-strong: #aebaaa;
+        --green: #245f4a;
+        --green-2: #dbeee4;
+        --amber: #b86d1c;
+        --amber-2: #f4d28d;
+        --blue: #345f9f;
+        --red: #b34f3f;
+        --shadow: 0 24px 70px rgba(48, 40, 28, 0.16);
+        --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
       }
 
       * {
@@ -38,15 +41,17 @@
         margin: 0;
         min-height: 100vh;
         background:
-          radial-gradient(circle at 18% 12%, rgba(244, 184, 74, 0.18), transparent 28rem),
-          radial-gradient(circle at 88% 18%, rgba(111, 227, 177, 0.13), transparent 26rem),
-          linear-gradient(135deg, #100f0e 0%, #1b1713 46%, #111827 100%);
+          linear-gradient(rgba(23, 32, 29, 0.055) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(23, 32, 29, 0.05) 1px, transparent 1px),
+          linear-gradient(180deg, #fbfcf7 0%, #eff3ed 48%, #e4e9e2 100%);
+        background-size: 36px 36px, 36px 36px, auto;
         color: var(--ink);
         font-family:
-          ui-sans-serif,
-          "Avenir Next",
+          -apple-system,
+          BlinkMacSystemFont,
+          "SF Pro Text",
           "Segoe UI",
-          Helvetica,
+          ui-sans-serif,
           sans-serif;
         letter-spacing: 0;
       }
@@ -55,23 +60,22 @@
         content: "";
         position: fixed;
         inset: 0;
+        z-index: -1;
         pointer-events: none;
-        opacity: 0.16;
-        background-image:
-          linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
-        background-size: 48px 48px;
-        mask-image: linear-gradient(to bottom, #000, transparent 72%);
+        background:
+          linear-gradient(120deg, rgba(36, 95, 74, 0.13), transparent 30%),
+          linear-gradient(260deg, rgba(52, 95, 159, 0.09), transparent 26%);
       }
 
       body::after {
         content: "";
         position: fixed;
         inset: 0;
+        z-index: -1;
         pointer-events: none;
-        opacity: 0.14;
-        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 240 240' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='.52'/%3E%3C/svg%3E");
-        mix-blend-mode: soft-light;
+        opacity: 0.1;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.45'/%3E%3C/svg%3E");
+        mix-blend-mode: multiply;
       }
 
       a {
@@ -79,117 +83,114 @@
         text-decoration: none;
       }
 
+      code {
+        font-family: var(--mono);
+      }
+
       .shell {
-        position: relative;
-        z-index: 1;
         width: min(1180px, calc(100% - 40px));
         margin: 0 auto;
       }
 
       .nav {
-        display: flex;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
         align-items: center;
-        justify-content: space-between;
-        gap: 20px;
-        padding: 22px 0 12px;
+        gap: 26px;
+        padding: 16px 0;
+        border-bottom: 1px solid rgba(23, 32, 29, 0.08);
+        background: rgba(251, 252, 247, 0.9);
+        backdrop-filter: blur(18px);
       }
 
       .brand {
         display: inline-flex;
         align-items: center;
         gap: 10px;
-        font-weight: 760;
+        font-size: 15px;
+        font-weight: 720;
       }
 
-      .mark {
-        display: grid;
-        place-items: center;
-        width: 34px;
-        height: 34px;
-        border: 1px solid var(--line-strong);
-        border-radius: 8px;
-        background:
-          linear-gradient(160deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.04)),
-          rgba(244, 184, 74, 0.14);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
-      }
-
-      .nav-links {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 5px;
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.06);
-        backdrop-filter: blur(18px);
+      .brand img {
+        width: 30px;
+        height: 30px;
+        border-radius: 7px;
+        box-shadow: 0 8px 18px rgba(36, 95, 74, 0.18);
       }
 
       .nav-actions {
         display: flex;
         align-items: center;
-        gap: 10px;
+        justify-content: flex-end;
+        gap: 18px;
       }
 
-      .nav-links a {
-        padding: 8px 13px;
-        border-radius: 999px;
-        color: var(--muted);
-        font-size: 13px;
-      }
-
-      .nav-links a:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: var(--ink);
+      .nav-links {
+        display: inline-flex;
+        align-items: center;
+        gap: 24px;
       }
 
       .lang-toggle {
         display: inline-flex;
         align-items: center;
-        gap: 4px;
-        padding: 5px;
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.06);
-        backdrop-filter: blur(18px);
+        gap: 2px;
+        padding: 3px;
+        border: 1px solid rgba(23, 32, 29, 0.14);
+        border-radius: 8px;
+        background: rgba(255, 252, 246, 0.82);
+      }
+
+      .nav-links a {
+        min-height: 30px;
+        padding: 0 2px;
+        border-bottom: 1px solid transparent;
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 620;
+        line-height: 30px;
       }
 
       .lang-toggle button {
-        appearance: none;
-        min-width: 36px;
-        padding: 8px 10px;
+        min-width: 30px;
+        min-height: 28px;
+        padding: 0 9px;
         border: 0;
-        border-radius: 999px;
+        border-radius: 6px;
         background: transparent;
         color: var(--muted);
         cursor: pointer;
         font: inherit;
         font-size: 13px;
-        font-weight: 720;
+        font-weight: 650;
         line-height: 1;
-        transition:
-          background 160ms ease,
-          color 160ms ease;
+      }
+
+      .nav-links a:hover {
+        border-color: rgba(36, 95, 74, 0.38);
+        color: var(--ink);
       }
 
       .lang-toggle button:hover {
-        background: rgba(255, 255, 255, 0.1);
+        background: rgba(36, 95, 74, 0.08);
         color: var(--ink);
       }
 
       .lang-toggle button.active {
-        background: linear-gradient(180deg, #ffc95c, #d98f24);
-        color: #1b1307;
+        background: var(--ink);
+        color: #fbfcf8;
       }
 
       .hero {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(360px, 0.86fr);
-        gap: 38px;
-        align-items: center;
-        min-height: calc(100vh - 74px);
-        padding: 34px 0 72px;
+        grid-template-columns: minmax(0, 0.92fr) minmax(390px, 0.82fr);
+        gap: 56px;
+        align-items: start;
+        min-height: calc(100vh - 64px);
+        padding: 42px 0 84px;
       }
 
       .eyebrow {
@@ -197,21 +198,22 @@
         align-items: center;
         gap: 9px;
         width: fit-content;
-        margin-bottom: 22px;
+        margin-bottom: 20px;
         padding: 7px 11px;
-        border: 1px solid rgba(244, 184, 74, 0.34);
+        border: 1px solid rgba(36, 95, 74, 0.22);
         border-radius: 999px;
-        background: rgba(244, 184, 74, 0.1);
-        color: #f7d99c;
+        background: rgba(219, 238, 228, 0.74);
+        color: var(--green);
         font-size: 13px;
+        font-weight: 650;
       }
 
       .pulse {
         width: 8px;
         height: 8px;
         border-radius: 99px;
-        background: var(--mint);
-        box-shadow: 0 0 0 5px rgba(111, 227, 177, 0.12);
+        background: #2f936a;
+        box-shadow: 0 0 0 5px rgba(47, 147, 106, 0.14);
       }
 
       h1,
@@ -222,24 +224,26 @@
       }
 
       h1 {
-        max-width: 760px;
-        font-family:
-          "Iowan Old Style",
-          "Palatino Linotype",
-          Georgia,
-          serif;
-        font-size: clamp(52px, 8vw, 112px);
-        line-height: 0.92;
-        font-weight: 650;
-        letter-spacing: 0;
+        max-width: 660px;
+        font-size: 92px;
+        line-height: 0.96;
+        font-weight: 760;
       }
 
       .hero-copy {
-        max-width: 650px;
-        margin-top: 24px;
-        color: var(--muted);
-        font-size: clamp(18px, 2vw, 23px);
-        line-height: 1.48;
+        max-width: 600px;
+        margin-top: 14px;
+        color: #4d5b55;
+        font-size: 19px;
+        line-height: 1.56;
+      }
+
+      .hero-subtitle {
+        margin-top: 14px;
+        color: var(--green);
+        font-size: 22px;
+        font-weight: 680;
+        line-height: 1.3;
       }
 
       .actions {
@@ -253,14 +257,15 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-height: 44px;
-        padding: 0 18px;
+        min-height: 42px;
+        padding: 0 15px;
         border: 1px solid var(--line);
-        border-radius: 10px;
-        background: rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        background: rgba(255, 252, 246, 0.76);
         color: var(--ink);
-        font-weight: 720;
-        backdrop-filter: blur(18px);
+        font-size: 14px;
+        font-weight: 680;
+        box-shadow: 0 12px 30px rgba(48, 40, 28, 0.08);
         transition:
           transform 160ms ease,
           border-color 160ms ease,
@@ -270,36 +275,86 @@
       .button:hover {
         transform: translateY(-2px);
         border-color: var(--line-strong);
-        background: rgba(255, 255, 255, 0.13);
+        background: #fffdf7;
       }
 
       .button.primary {
-        border-color: rgba(244, 184, 74, 0.62);
-        background: linear-gradient(180deg, #ffc95c, #d98f24);
-        color: #1b1307;
-        box-shadow: 0 18px 50px rgba(244, 184, 74, 0.18);
+        border-color: #17352b;
+        background: var(--ink);
+        color: #fbfcf8;
+      }
+
+      .install-strip {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        max-width: 720px;
+        margin-top: 20px;
+        padding: 8px 8px 8px 14px;
+        border: 1px solid rgba(23, 32, 29, 0.14);
+        border-radius: 10px;
+        background: rgba(255, 252, 246, 0.84);
+        box-shadow: var(--shadow);
+      }
+
+      .install-strip code {
+        display: block;
+        min-width: 0;
+        max-width: 100%;
+        overflow-x: auto;
+        color: #293932;
+        font-size: 13px;
+        line-height: 1.5;
+        white-space: nowrap;
+        scrollbar-width: thin;
+      }
+
+      .copy-button {
+        min-height: 38px;
+        padding: 0 12px;
+        border: 1px solid rgba(23, 32, 29, 0.16);
+        border-radius: 8px;
+        background: var(--green-2);
+        color: var(--green);
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .proof {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        max-width: 660px;
+        margin-top: 18px;
+      }
+
+      .proof div {
+        padding: 12px 14px;
+        border-left: 2px solid var(--green);
+        background: rgba(255, 252, 246, 0.56);
+      }
+
+      .proof strong {
+        display: block;
+        font-size: 18px;
+      }
+
+      .proof span {
+        color: var(--muted);
+        font-size: 12px;
       }
 
       .hero-panel {
         position: relative;
-        border: 1px solid var(--line);
+        margin-top: 44px;
+        border: 1px solid rgba(23, 32, 29, 0.16);
         border-radius: 8px;
-        background:
-          linear-gradient(155deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04)),
-          var(--panel);
+        background: #fbfcf8;
         box-shadow: var(--shadow);
-        backdrop-filter: blur(26px);
         overflow: hidden;
-      }
-
-      .hero-panel::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        pointer-events: none;
-        background: linear-gradient(110deg, rgba(255, 255, 255, 0.22), transparent 38%);
-        opacity: 0.55;
       }
 
       .window-top {
@@ -307,9 +362,9 @@
         align-items: center;
         justify-content: space-between;
         gap: 12px;
-        padding: 13px 14px;
+        padding: 12px 14px;
         border-bottom: 1px solid var(--line);
-        background: rgba(255, 255, 255, 0.06);
+        background: #e8ede6;
       }
 
       .traffic {
@@ -325,27 +380,107 @@
       }
 
       .traffic span:nth-child(1) {
-        background: var(--red);
+        background: #e96f60;
       }
 
       .traffic span:nth-child(2) {
-        background: var(--amber);
+        background: #e7b04d;
       }
 
       .traffic span:nth-child(3) {
-        background: var(--mint);
+        background: #57b979;
       }
 
-      .window-title {
+      .window-title,
+      .menu-status {
         color: var(--muted);
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-family: var(--mono);
         font-size: 12px;
       }
 
-      .scheduler {
+      .preview-layout {
         display: grid;
-        gap: 12px;
+        grid-template-columns: 138px minmax(0, 1fr);
+        min-height: 500px;
+      }
+
+      .sidebar {
         padding: 14px;
+        border-right: 1px solid var(--line);
+        background: #e9eee8;
+      }
+
+      .side-title {
+        margin-bottom: 14px;
+        color: var(--quiet);
+        font-family: var(--mono);
+        font-size: 11px;
+        text-transform: uppercase;
+      }
+
+      .side-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 34px;
+        padding: 0 9px;
+        border-radius: 7px;
+        color: #4f5a55;
+        font-size: 13px;
+        font-weight: 720;
+      }
+
+      .side-item.active {
+        background: #20312b;
+        color: #fbfcf8;
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 99px;
+        background: currentColor;
+      }
+
+      .content-preview {
+        padding: 14px;
+      }
+
+      .preview-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 14px;
+      }
+
+      .preview-head h2 {
+        font-family: inherit;
+        font-size: 23px;
+        line-height: 1.1;
+        font-weight: 820;
+      }
+
+      .preview-head p {
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .mini-button {
+        min-height: 34px;
+        padding: 0 11px;
+        border-radius: 7px;
+        background: var(--green);
+        color: #fbfcf8;
+        font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .job-list {
+        display: grid;
+        gap: 10px;
       }
 
       .job-row {
@@ -354,9 +489,9 @@
         gap: 12px;
         align-items: center;
         padding: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.11);
+        border: 1px solid var(--line);
         border-radius: 8px;
-        background: rgba(9, 8, 7, 0.32);
+        background: #fdfefb;
       }
 
       .logo {
@@ -364,83 +499,83 @@
         place-items: center;
         width: 34px;
         height: 34px;
-        border-radius: 8px;
+        border-radius: 7px;
         color: #17120c;
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-family: var(--mono);
+        font-size: 12px;
         font-weight: 850;
       }
 
       .logo.py {
-        background: #ffd166;
+        background: #f1c66d;
       }
 
       .logo.sh {
-        background: #6fe3b1;
+        background: #b9e8ca;
       }
 
       .logo.ai {
-        background: #75a7ff;
+        background: #bfd3f5;
       }
 
       .job-name {
-        font-weight: 760;
+        font-weight: 800;
       }
 
       .job-meta {
         margin-top: 4px;
         color: var(--quiet);
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-family: var(--mono);
         font-size: 12px;
       }
 
       .badge {
         padding: 5px 8px;
         border-radius: 999px;
-        background: rgba(111, 227, 177, 0.12);
-        color: #adf5d7;
+        background: var(--green-2);
+        color: var(--green);
         font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
       }
 
       .log {
-        margin: 2px 14px 14px;
+        margin-top: 12px;
         padding: 14px;
-        border: 1px solid rgba(111, 227, 177, 0.18);
+        border: 1px solid #cad9cf;
         border-radius: 8px;
-        background: rgba(0, 0, 0, 0.34);
-        color: #b8ead7;
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        background: #19231f;
+        color: #c8f1d8;
+        font-family: var(--mono);
         font-size: 12px;
         line-height: 1.65;
+        white-space: pre-wrap;
       }
 
       .section {
         padding: 78px 0;
-        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        border-top: 1px solid rgba(23, 32, 29, 0.1);
       }
 
       .section-head {
         display: grid;
-        grid-template-columns: minmax(0, 0.88fr) minmax(280px, 0.56fr);
+        grid-template-columns: minmax(0, 0.8fr) minmax(280px, 0.58fr);
         gap: 28px;
         align-items: end;
         margin-bottom: 28px;
       }
 
       h2 {
-        font-family:
-          "Iowan Old Style",
-          "Palatino Linotype",
-          Georgia,
-          serif;
-        font-size: clamp(34px, 4vw, 58px);
-        line-height: 1;
-        font-weight: 620;
-        letter-spacing: 0;
+        max-width: 620px;
+        font-size: 44px;
+        line-height: 1.05;
+        font-weight: 740;
       }
 
-      .section-head p {
+      .section-head p,
+      .copy-panel p {
         color: var(--muted);
-        line-height: 1.58;
+        line-height: 1.6;
       }
 
       .feature-grid {
@@ -450,19 +585,17 @@
       }
 
       .feature {
-        min-height: 210px;
+        min-height: 218px;
         padding: 18px;
         border: 1px solid var(--line);
         border-radius: 8px;
-        background:
-          linear-gradient(160deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.04)),
-          rgba(255, 255, 255, 0.04);
-        backdrop-filter: blur(22px);
+        background: rgba(255, 252, 246, 0.78);
+        box-shadow: 0 14px 40px rgba(48, 40, 28, 0.08);
       }
 
       .feature .num {
         color: var(--amber);
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-family: var(--mono);
         font-size: 12px;
       }
 
@@ -487,11 +620,11 @@
       }
 
       .copy-panel,
-      .code-panel {
+      .code-panel,
+      .install-panel {
         border: 1px solid var(--line);
         border-radius: 8px;
-        background: var(--panel);
-        backdrop-filter: blur(24px);
+        background: rgba(255, 252, 246, 0.82);
         box-shadow: var(--shadow);
       }
 
@@ -505,8 +638,6 @@
 
       .copy-panel p {
         margin-top: 14px;
-        color: var(--muted);
-        line-height: 1.65;
       }
 
       .mini-list {
@@ -517,9 +648,9 @@
 
       .mini-list div {
         padding: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(23, 32, 29, 0.1);
         border-radius: 8px;
-        background: rgba(255, 255, 255, 0.04);
+        background: rgba(244, 238, 227, 0.64);
       }
 
       .mini-list strong {
@@ -533,7 +664,8 @@
         line-height: 1.45;
       }
 
-      .code-panel {
+      .code-panel,
+      .install-panel {
         overflow: hidden;
       }
 
@@ -542,37 +674,44 @@
         gap: 7px;
         padding: 12px;
         border-bottom: 1px solid var(--line);
+        background: rgba(238, 231, 219, 0.64);
       }
 
       .code-tabs span {
         padding: 6px 9px;
         border-radius: 7px;
-        background: rgba(255, 255, 255, 0.08);
+        background: #fbfcf8;
         color: var(--muted);
         font-size: 12px;
+        font-weight: 760;
       }
 
       pre {
         margin: 0;
         padding: 20px;
         overflow-x: auto;
-        color: #d8e9de;
-        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        color: #26352f;
+        font-family: var(--mono);
         font-size: 13px;
         line-height: 1.72;
         white-space: pre;
       }
 
+      .terminal pre {
+        background: #17201d;
+        color: #d7f4e1;
+      }
+
       .comment {
-        color: #7f9b8e;
+        color: #809589;
       }
 
       .key {
-        color: #f4d28b;
+        color: var(--blue);
       }
 
       .ok {
-        color: #93f0c5;
+        color: #2b895f;
       }
 
       .steps {
@@ -582,11 +721,11 @@
       }
 
       .step {
+        min-height: 190px;
         padding: 20px;
         border: 1px solid var(--line);
         border-radius: 8px;
-        background: rgba(255, 255, 255, 0.05);
-        min-height: 184px;
+        background: rgba(255, 252, 246, 0.7);
       }
 
       .step span {
@@ -594,10 +733,10 @@
         place-items: center;
         width: 30px;
         height: 30px;
-        border: 1px solid rgba(244, 184, 74, 0.45);
-        border-radius: 8px;
-        color: var(--amber);
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        border: 1px solid rgba(36, 95, 74, 0.3);
+        border-radius: 7px;
+        color: var(--green);
+        font-family: var(--mono);
       }
 
       .step h3 {
@@ -621,7 +760,7 @@
         text-align: center;
       }
 
-      @media (max-width: 920px) {
+      @media (max-width: 980px) {
         .hero,
         .section-head,
         .split {
@@ -633,47 +772,99 @@
           padding-top: 54px;
         }
 
+        h1 {
+          font-size: 72px;
+        }
+
         .feature-grid,
         .steps {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
-
-        .nav {
-          align-items: flex-start;
-        }
       }
 
-      @media (max-width: 640px) {
+      @media (max-width: 700px) {
         .shell {
           width: min(100% - 24px, 1180px);
         }
 
         .nav {
-          flex-direction: column;
-        }
-
-        .nav-links {
-          width: 100%;
-          overflow-x: auto;
-          justify-content: flex-start;
+          position: static;
+          display: grid;
+          grid-template-columns: 1fr auto;
+          align-items: center;
+          gap: 12px 10px;
+          padding: 14px 0;
         }
 
         .nav-actions {
+          display: contents;
+        }
+
+        .nav-links {
+          grid-column: 1 / -1;
+          grid-row: 2;
           width: 100%;
-          flex-wrap: wrap;
+          overflow-x: auto;
+          justify-content: flex-start;
+          gap: 16px;
+          padding-bottom: 2px;
+        }
+
+        .nav-links a {
+          font-size: 14px;
+          font-weight: 620;
+          white-space: nowrap;
         }
 
         .lang-toggle {
-          margin-left: auto;
+          grid-column: 2;
+          grid-row: 1;
+          margin-left: 0;
+        }
+
+        .hero {
+          padding-top: 34px;
         }
 
         h1 {
-          font-size: 52px;
+          font-size: 56px;
+          line-height: 1.02;
         }
 
+        .hero-copy {
+          font-size: 17px;
+        }
+
+        .install-strip {
+          grid-template-columns: 1fr;
+          padding: 12px;
+        }
+
+        .copy-button {
+          width: 100%;
+        }
+
+        .proof,
         .feature-grid,
         .steps {
           grid-template-columns: 1fr;
+        }
+
+        .preview-layout {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(max-content, 1fr));
+          gap: 6px;
+          overflow-x: auto;
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        .side-title {
+          display: none;
         }
 
         .job-row {
@@ -695,15 +886,15 @@
     <div class="shell">
       <nav class="nav" aria-label="Primary navigation" data-i18n-aria-label="navLabel">
         <a class="brand" href="#">
-          <span class="mark">cb</span>
+          <img src="./assets/cronbox-icon.png" alt="" />
           <span>CronBox</span>
         </a>
         <div class="nav-actions">
           <div class="nav-links">
+            <a href="#install" data-i18n="navInstall">安装</a>
             <a href="#features" data-i18n="navFeatures">功能</a>
             <a href="#agents" data-i18n="navAgents">Agent 任务</a>
             <a href="#cli" data-i18n="navCli">CLI</a>
-            <a href="#workflow" data-i18n="navWorkflow">流程</a>
           </div>
           <div class="lang-toggle" aria-label="Language">
             <button type="button" data-lang="zh" class="active">中</button>
@@ -715,72 +906,134 @@
       <main>
         <section class="hero">
           <div>
-            <div class="eyebrow"><span class="pulse"></span> <span data-i18n="eyebrow">为重要脚本准备的本地调度器</span></div>
-            <h1 data-i18n="heroTitle">把 cron job 放进菜单栏，而不是服务器。</h1>
+            <div class="eyebrow">
+              <span class="pulse"></span>
+              <span data-i18n="eyebrow">macOS 菜单栏里的本地脚本调度器</span>
+            </div>
+            <h1 data-i18n="heroTitle">CronBox</h1>
+            <p class="hero-subtitle" data-i18n="heroSubtitle">Local cron, visible logs, menu bar runtime.</p>
             <p class="hero-copy" data-i18n="heroCopy">
-              CronBox 会监听本地脚本目录，调度真正可执行的入口，实时展示日志，并把运行历史放在每个脚本旁边。它也能把 Codex 和 Claude 提示词变成可重复执行的本地任务。
+              CronBox 扫描本地脚本入口，按 cron 或 one-shot 触发运行，持续记录日志、结果和历史。适合那些不该塞进服务器、但又不能靠记忆执行的本地自动化。
             </p>
             <div class="actions">
-              <a class="button primary" href="#cli" data-i18n="heroPrimary">查看 CLI 流程</a>
-              <a class="button" href="#features" data-i18n="heroSecondary">浏览功能</a>
+              <a class="button primary" href="#install" data-i18n="heroPrimary">安装 macOS 版本</a>
+              <a class="button" href="#cli" data-i18n="heroSecondary">查看 CLI</a>
+            </div>
+            <div class="install-strip" aria-label="Install command" data-i18n-aria-label="installCommandLabel">
+              <code id="install-command" data-copy-value="curl -fsSL https://raw.githubusercontent.com/xiaoxiunique/cronbox/main/scripts/install-macos.sh | bash">curl install for macOS</code>
+              <button class="copy-button" type="button" data-copy="#install-command" data-i18n="copyInstall">
+                复制
+              </button>
+            </div>
+            <div class="proof" aria-label="Product capabilities" data-i18n-aria-label="proofLabel">
+              <div>
+                <strong>cron</strong>
+                <span data-i18n="proofCron">重复和一次性调度</span>
+              </div>
+              <div>
+                <strong>logs</strong>
+                <span data-i18n="proofLogs">实时 stdout / stderr</span>
+              </div>
+              <div>
+                <strong>agents</strong>
+                <span data-i18n="proofAgents">Codex / Claude 任务</span>
+              </div>
             </div>
           </div>
 
           <aside class="hero-panel" aria-label="CronBox interface preview" data-i18n-aria-label="previewLabel">
             <div class="window-top">
               <div class="traffic"><span></span><span></span><span></span></div>
-              <div class="window-title" data-i18n="windowTitle">CronBox / 已调度</div>
+              <div class="window-title" data-i18n="windowTitle">CronBox / Schedules</div>
+              <div class="menu-status">menu bar active</div>
             </div>
-            <div class="scheduler">
-              <div class="job-row">
-                <div class="logo py">py</div>
-                <div>
-                  <div class="job-name">chain-health-report</div>
-                  <div class="job-meta">0 9 * * * · Asia/Shanghai</div>
-                </div>
-                <div class="badge" data-i18n="badgeNext">下次 09:00</div>
+            <div class="preview-layout">
+              <div class="sidebar">
+                <div class="side-title">local ops</div>
+                <div class="side-item active"><span class="dot"></span><span data-i18n="sideSchedules">调度</span></div>
+                <div class="side-item"><span class="dot"></span><span data-i18n="sideScripts">脚本</span></div>
+                <div class="side-item"><span class="dot"></span><span data-i18n="sideHistory">历史</span></div>
+                <div class="side-item"><span class="dot"></span><span data-i18n="sideSettings">设置</span></div>
               </div>
-              <div class="job-row">
-                <div class="logo sh">sh</div>
-                <div>
-                  <div class="job-name">sync-indexer-cache</div>
-                  <div class="job-meta">*/15 * * * * · workspace-write</div>
+              <div class="content-preview">
+                <div class="preview-head">
+                  <div>
+                    <h2 data-i18n="previewTitle">Scheduled scripts</h2>
+                    <p data-i18n="previewCopy">enabled jobs, next run, and live state in one dense view</p>
+                  </div>
+                  <div class="mini-button" data-i18n="previewButton">Run now</div>
                 </div>
-                <div class="badge" data-i18n="badgeRunning">运行中</div>
-              </div>
-              <div class="job-row">
-                <div class="logo ai">ai</div>
-                <div>
-                  <div class="job-name">codex-weekly-maintenance</div>
-                  <div class="job-meta">AGENTS.md · ~/.cronbox</div>
+                <div class="job-list">
+                  <div class="job-row">
+                    <div class="logo py">py</div>
+                    <div>
+                      <div class="job-name">daily-report.py</div>
+                      <div class="job-meta">0 9 * * * · Asia/Shanghai</div>
+                    </div>
+                    <div class="badge" data-i18n="badgeNext">next 09:00</div>
+                  </div>
+                  <div class="job-row">
+                    <div class="logo sh">sh</div>
+                    <div>
+                      <div class="job-name">sync-indexer-cache.sh</div>
+                      <div class="job-meta">*/15 * * * * · skip overlap</div>
+                    </div>
+                    <div class="badge" data-i18n="badgeRunning">running</div>
+                  </div>
+                  <div class="job-row">
+                    <div class="logo ai">ai</div>
+                    <div>
+                      <div class="job-name">codex-weekly-maintenance</div>
+                      <div class="job-meta">AGENTS.md · ~/.cronbox</div>
+                    </div>
+                    <div class="badge" data-i18n="badgeEnabled">enabled</div>
+                  </div>
                 </div>
-                <div class="badge" data-i18n="badgeEnabled">已启用</div>
-              </div>
-            </div>
-            <pre class="log">[09:00:01] start chain-health-report
-[09:00:03] loading args: {"network":"iotex"}
-[09:00:18] indexed 14,208 events
+                <pre class="log">[09:00:01] start daily-report.py
+[09:00:03] args: {"date":"today"}
+[09:00:18] wrote summary.md
 [09:00:19] status: success · 18.4s</pre>
+              </div>
+            </div>
           </aside>
+        </section>
+
+        <section class="section" id="install">
+          <div class="section-head">
+            <h2 data-i18n="installTitle">一条命令安装到 macOS。</h2>
+            <p data-i18n="installCopy">
+              安装脚本会下载最新发布版，把 CronBox.app 放进 /Applications，并把 cronbox 命令链接到一个可写的 bin 目录。
+            </p>
+          </div>
+          <div class="install-panel terminal">
+            <div class="code-tabs">
+              <span data-i18n="codeTabInstall">install</span>
+              <span>macOS</span>
+            </div>
+            <pre>curl -fsSL https://raw.githubusercontent.com/xiaoxiunique/cronbox/main/scripts/install-macos.sh | bash
+
+open /Applications/CronBox.app
+cronbox help</pre>
+          </div>
         </section>
 
         <section class="section" id="features">
           <div class="section-head">
             <h2 data-i18n="featuresTitle">为本地运维脚本而设计。</h2>
             <p data-i18n="featuresCopy">
-              CronBox 更像一个轻量的 Windmill 风格控制台，而不是普通 cron 编辑器。核心对象是运行历史和日志，不是装饰性的调度表单。
+              CronBox 更像一个轻量的本地控制台，而不是普通 cron 编辑器。它关注入口扫描、运行状态、日志、历史和可恢复性。
             </p>
           </div>
           <div class="feature-grid">
             <article class="feature">
               <div class="num">01</div>
-              <h3 data-i18n="feature1Title">入口扫描</h3>
-              <p data-i18n="feature1Copy">添加目录时，只展示真正能运行的脚本。</p>
+              <h3 data-i18n="feature1Title">选择式入口扫描</h3>
+              <p data-i18n="feature1Copy">目录添加默认先预览，用 --include 或 --all 决定哪些脚本进入 CronBox。</p>
             </article>
             <article class="feature">
               <div class="num">02</div>
-              <h3 data-i18n="feature2Title">菜单栏后台运行</h3>
-              <p data-i18n="feature2Copy">关闭主窗口后，已调度任务仍会通过菜单栏进程继续运行。</p>
+              <h3 data-i18n="feature2Title">重复与 one-shot</h3>
+              <p data-i18n="feature2Copy">支持标准 cron 表达式，也支持触发一次后自动禁用的 --once 调度。</p>
             </article>
             <article class="feature">
               <div class="num">03</div>
@@ -789,8 +1042,8 @@
             </article>
             <article class="feature">
               <div class="num">04</div>
-              <h3 data-i18n="feature4Title">跳过重叠执行</h3>
-              <p data-i18n="feature4Copy">如果上一轮调度还在排队或运行，下一次 tick 会自动跳过。</p>
+              <h3 data-i18n="feature4Title">通知和重叠保护</h3>
+              <p data-i18n="feature4Copy">调度完成后发 macOS 通知；上一轮还没结束时自动跳过下一轮。</p>
             </article>
           </div>
         </section>
@@ -800,7 +1053,7 @@
             <div class="copy-panel">
               <h3 data-i18n="agentsTitle">像调度脚本一样调度 coding agent。</h3>
               <p data-i18n="agentsCopy">
-                CronBox 可以在默认本地工作区下创建 Codex 和 Claude Code 任务脚本。这个工作区会保存持久化规则文件，让定时执行的 agent 行为保持一致。
+                CronBox 可以创建 Codex 和 Claude Code 任务脚本。默认工作区保存 AGENTS.md 和 CLAUDE.md，让定时执行的 agent 行为保持一致。
               </p>
               <div class="mini-list">
                 <div>
@@ -812,8 +1065,8 @@
                   <span><code>AGENTS.md</code> <span data-i18n="rulesCopy">和</span> <code>CLAUDE.md</code> <span data-i18n="rulesCopySuffix">会和生成的任务放在一起。</span></span>
                 </div>
                 <div>
-                  <strong data-i18n="historyTitle">历史</strong>
-                  <span data-i18n="historyCopy">每次运行都会把元数据、输入、输出、错误、耗时和日志放在一起。</span>
+                  <strong data-i18n="skillTitle">Claude Code skill</strong>
+                  <span data-i18n="skillCopy">运行 cronbox skills install，把 CronBox 调度能力交给 agent 使用。</span>
                 </div>
               </div>
             </div>
@@ -842,13 +1095,14 @@ cd ~/.cronbox
             <h2 data-i18n="cliTitle">可以从 App 或终端管理。</h2>
             <p><span data-i18n="cliCopyPrefix">桌面 App 会在可行时自动安装配套的</span> <code>cronbox</code> <span data-i18n="cliCopySuffix">命令，这样本地自动化不打开 UI 也能脚本化管理。</span></p>
           </div>
-          <div class="code-panel">
+          <div class="code-panel terminal">
             <div class="code-tabs"><span data-i18n="codeTabTerminal">终端</span></div>
-            <pre>cronbox add ~/scripts
-cronbox scripts list
-cronbox schedules add ./daily-report.sh "0 9 * * *" --tz Asia/Shanghai
+            <pre>cronbox add ~/scripts --include daily-report.py
+cronbox add ~/scripts/cleanup.sh --alias "Clean temporary files"
+cronbox schedules add ./daily-report.py "0 9 * * *" --tz Asia/Shanghai
+cronbox schedules add ./reminder.sh "* * * * *" --once
 cronbox jobs list
-cronbox run ~/scripts daily-report.sh --args '{"date":"today"}'</pre>
+cronbox run ~/scripts daily-report.py --args '{"date":"today"}'</pre>
           </div>
         </section>
 
@@ -863,16 +1117,16 @@ cronbox run ~/scripts daily-report.sh --args '{"date":"today"}'</pre>
             <article class="step">
               <span>1</span>
               <h3 data-i18n="step1Title">添加目录</h3>
-              <p data-i18n="step1Copy">把 CronBox 指向脚本目录，不可运行文件不会出现在列表里。</p>
+              <p data-i18n="step1Copy">把 CronBox 指向脚本目录，只把真正需要调度的入口加入列表。</p>
             </article>
             <article class="step">
               <span>2</span>
-              <h3 data-i18n="step2Title">在一个弹框里配置</h3>
-              <p data-i18n="step2Copy">别名、cron 表达式、时区、参数和启用状态都在一个地方编辑。</p>
+              <h3 data-i18n="step2Title">配置调度</h3>
+              <p data-i18n="step2Copy">别名、cron 表达式、时区、JSON 参数和启用状态都在一个地方编辑。</p>
             </article>
             <article class="step">
               <span>3</span>
-              <h3 data-i18n="step3Title">阅读日志</h3>
+              <h3 data-i18n="step3Title">看日志和历史</h3>
               <p data-i18n="step3Copy">详情页以日志为核心，把输入、历史、结果和输出放在同一个上下文里。</p>
             </article>
           </div>
@@ -886,167 +1140,225 @@ cronbox run ~/scripts daily-report.sh --args '{"date":"today"}'</pre>
     <script>
       const messages = {
         zh: {
-          title: 'CronBox - 本地优先的脚本调度器',
-          description: 'CronBox 是一个本地优先的菜单栏调度器，用来管理脚本、cron job 和 coding agent 任务。',
-          navLabel: '主导航',
-          previewLabel: 'CronBox 界面预览',
-          navFeatures: '功能',
-          navAgents: 'Agent 任务',
-          navCli: 'CLI',
-          navWorkflow: '流程',
-          eyebrow: '为重要脚本准备的本地调度器',
-          heroTitle: '把 cron job 放进菜单栏，而不是服务器。',
+          title: "CronBox - 本地优先的脚本调度器",
+          description: "CronBox 是一个本地优先的 macOS 菜单栏调度器，用来管理脚本、cron job 和 coding agent 任务。",
+          navLabel: "主导航",
+          previewLabel: "CronBox 界面预览",
+          installCommandLabel: "安装命令",
+          proofLabel: "产品能力",
+          navInstall: "安装",
+          navFeatures: "功能",
+          navAgents: "Agent 任务",
+          navCli: "CLI",
+          eyebrow: "macOS 菜单栏里的本地脚本调度器",
+          heroTitle: "CronBox",
+          heroSubtitle: "本地 cron、可见日志、菜单栏后台运行。",
           heroCopy:
-            'CronBox 会监听本地脚本目录，调度真正可执行的入口，实时展示日志，并把运行历史放在每个脚本旁边。它也能把 Codex 和 Claude 提示词变成可重复执行的本地任务。',
-          heroPrimary: '查看 CLI 流程',
-          heroSecondary: '浏览功能',
-          windowTitle: 'CronBox / 已调度',
-          badgeNext: '下次 09:00',
-          badgeRunning: '运行中',
-          badgeEnabled: '已启用',
-          featuresTitle: '为本地运维脚本而设计。',
+            "CronBox 扫描本地脚本入口，按 cron 或 one-shot 触发运行，持续记录日志、结果和历史。适合那些不该塞进服务器、但又不能靠记忆执行的本地自动化。",
+          heroPrimary: "安装 macOS 版本",
+          heroSecondary: "查看 CLI",
+          copyInstall: "复制",
+          copied: "已复制",
+          proofCron: "重复和一次性调度",
+          proofLogs: "实时 stdout / stderr",
+          proofAgents: "Codex / Claude 任务",
+          windowTitle: "CronBox / 调度",
+          sideSchedules: "调度",
+          sideScripts: "脚本",
+          sideHistory: "历史",
+          sideSettings: "设置",
+          previewTitle: "Scheduled scripts",
+          previewCopy: "启用状态、下次运行和实时状态放在同一个密集视图里",
+          previewButton: "立即运行",
+          badgeNext: "下次 09:00",
+          badgeRunning: "运行中",
+          badgeEnabled: "已启用",
+          installTitle: "一条命令安装到 macOS。",
+          installCopy:
+            "安装脚本会下载最新发布版，把 CronBox.app 放进 /Applications，并把 cronbox 命令链接到一个可写的 bin 目录。",
+          codeTabInstall: "安装",
+          featuresTitle: "为本地运维脚本而设计。",
           featuresCopy:
-            'CronBox 更像一个轻量的 Windmill 风格控制台，而不是普通 cron 编辑器。核心对象是运行历史和日志，不是装饰性的调度表单。',
-          feature1Title: '入口扫描',
-          feature1Copy: '添加目录时，只展示真正能运行的脚本。',
-          feature2Title: '菜单栏后台运行',
-          feature2Copy: '关闭主窗口后，已调度任务仍会通过菜单栏进程继续运行。',
-          feature3Title: '实时日志',
-          feature3Copy: '进程还在运行时，stdout 和 stderr 就会持续写入任务历史。',
-          feature4Title: '跳过重叠执行',
-          feature4Copy: '如果上一轮调度还在排队或运行，下一次 tick 会自动跳过。',
-          agentsTitle: '像调度脚本一样调度 coding agent。',
+            "CronBox 更像一个轻量的本地控制台，而不是普通 cron 编辑器。它关注入口扫描、运行状态、日志、历史和可恢复性。",
+          feature1Title: "选择式入口扫描",
+          feature1Copy: "目录添加默认先预览，用 --include 或 --all 决定哪些脚本进入 CronBox。",
+          feature2Title: "重复与 one-shot",
+          feature2Copy: "支持标准 cron 表达式，也支持触发一次后自动禁用的 --once 调度。",
+          feature3Title: "实时日志",
+          feature3Copy: "进程还在运行时，stdout 和 stderr 就会持续写入任务历史。",
+          feature4Title: "通知和重叠保护",
+          feature4Copy: "调度完成后发 macOS 通知；上一轮还没结束时自动跳过下一轮。",
+          agentsTitle: "像调度脚本一样调度 coding agent。",
           agentsCopy:
-            'CronBox 可以在默认本地工作区下创建 Codex 和 Claude Code 任务脚本。这个工作区会保存持久化规则文件，让定时执行的 agent 行为保持一致。',
-          workspaceTitle: '工作区',
-          workspaceCopy: 'Agent 任务默认从',
-          workspaceCopySuffix: '运行。',
-          rulesTitle: '规则',
-          rulesCopy: '和',
-          rulesCopySuffix: '会和生成的任务放在一起。',
-          historyTitle: '历史',
-          historyCopy: '每次运行都会把元数据、输入、输出、错误、耗时和日志放在一起。',
-          codeTabCodex: 'codex 任务',
-          codeTabClaude: 'claude 任务',
-          codeTabLogs: '日志',
-          cliTitle: '可以从 App 或终端管理。',
-          cliCopyPrefix: '桌面 App 会在可行时自动安装配套的',
-          cliCopySuffix: '命令，这样本地自动化不打开 UI 也能脚本化管理。',
-          codeTabTerminal: '终端',
-          workflowTitle: '一个紧凑的本地周期任务闭环。',
-          workflowCopy: 'CronBox 把操作路径压短：扫描、调度、看日志、查历史、调整，然后重复。',
-          step1Title: '添加目录',
-          step1Copy: '把 CronBox 指向脚本目录，不可运行文件不会出现在列表里。',
-          step2Title: '在一个弹框里配置',
-          step2Copy: '别名、cron 表达式、时区、参数和启用状态都在一个地方编辑。',
-          step3Title: '阅读日志',
-          step3Copy: '详情页以日志为核心，把输入、历史、结果和输出放在同一个上下文里。',
-          footer: 'CronBox · 本地优先的脚本和 agent 任务调度器'
+            "CronBox 可以创建 Codex 和 Claude Code 任务脚本。默认工作区保存 AGENTS.md 和 CLAUDE.md，让定时执行的 agent 行为保持一致。",
+          workspaceTitle: "工作区",
+          workspaceCopy: "Agent 任务默认从",
+          workspaceCopySuffix: "运行。",
+          rulesTitle: "规则",
+          rulesCopy: "和",
+          rulesCopySuffix: "会和生成的任务放在一起。",
+          skillTitle: "Claude Code skill",
+          skillCopy: "运行 cronbox skills install，把 CronBox 调度能力交给 agent 使用。",
+          codeTabCodex: "codex 任务",
+          codeTabClaude: "claude 任务",
+          codeTabLogs: "日志",
+          cliTitle: "可以从 App 或终端管理。",
+          cliCopyPrefix: "桌面 App 会在可行时自动安装配套的",
+          cliCopySuffix: "命令，这样本地自动化不打开 UI 也能脚本化管理。",
+          codeTabTerminal: "终端",
+          workflowTitle: "一个紧凑的本地周期任务闭环。",
+          workflowCopy: "CronBox 把操作路径压短：扫描、调度、看日志、查历史、调整，然后重复。",
+          step1Title: "添加目录",
+          step1Copy: "把 CronBox 指向脚本目录，只把真正需要调度的入口加入列表。",
+          step2Title: "配置调度",
+          step2Copy: "别名、cron 表达式、时区、JSON 参数和启用状态都在一个地方编辑。",
+          step3Title: "看日志和历史",
+          step3Copy: "详情页以日志为核心，把输入、历史、结果和输出放在同一个上下文里。",
+          footer: "CronBox · 本地优先的脚本和 agent 任务调度器"
         },
         en: {
-          title: 'CronBox - Local-first script scheduler',
+          title: "CronBox - Local-first script scheduler",
           description:
-            'CronBox is a local-first menu bar scheduler for scripts, cron jobs, and coding-agent tasks.',
-          navLabel: 'Primary navigation',
-          previewLabel: 'CronBox interface preview',
-          navFeatures: 'Features',
-          navAgents: 'Agent tasks',
-          navCli: 'CLI',
-          navWorkflow: 'Workflow',
-          eyebrow: 'Local scheduler for scripts that matter',
-          heroTitle: 'Run your cron jobs from a menu bar, not a server.',
+            "CronBox is a local-first macOS menu bar scheduler for scripts, cron jobs, and coding-agent tasks.",
+          navLabel: "Primary navigation",
+          previewLabel: "CronBox interface preview",
+          installCommandLabel: "Install command",
+          proofLabel: "Product capabilities",
+          navInstall: "Install",
+          navFeatures: "Features",
+          navAgents: "Agent tasks",
+          navCli: "CLI",
+          eyebrow: "Local script scheduler for the macOS menu bar",
+          heroTitle: "CronBox",
+          heroSubtitle: "Local cron, visible logs, menu bar runtime.",
           heroCopy:
-            'CronBox watches local script folders, schedules executable entrypoints, streams logs, and keeps run history beside every script. It also turns Codex and Claude prompts into repeatable local jobs.',
-          heroPrimary: 'See CLI flow',
-          heroSecondary: 'Explore features',
-          windowTitle: 'CronBox / scheduled',
-          badgeNext: 'next 09:00',
-          badgeRunning: 'running',
-          badgeEnabled: 'enabled',
-          featuresTitle: 'Built for local operational scripts.',
+            "CronBox scans local script entrypoints, runs them on cron or one-shot schedules, and keeps logs, results, and history together. It is built for local automation that should not live on a server or in your memory.",
+          heroPrimary: "Install for macOS",
+          heroSecondary: "View CLI",
+          copyInstall: "Copy",
+          copied: "Copied",
+          proofCron: "recurring and one-shot schedules",
+          proofLogs: "live stdout / stderr",
+          proofAgents: "Codex / Claude tasks",
+          windowTitle: "CronBox / Schedules",
+          sideSchedules: "Schedules",
+          sideScripts: "Scripts",
+          sideHistory: "History",
+          sideSettings: "Settings",
+          previewTitle: "Scheduled scripts",
+          previewCopy: "enabled jobs, next run, and live state in one dense view",
+          previewButton: "Run now",
+          badgeNext: "next 09:00",
+          badgeRunning: "running",
+          badgeEnabled: "enabled",
+          installTitle: "Install on macOS with one command.",
+          installCopy:
+            "The installer downloads the latest published release, copies CronBox.app into /Applications, and links the cronbox command into a writable bin directory.",
+          codeTabInstall: "install",
+          featuresTitle: "Built for local operational scripts.",
           featuresCopy:
-            'CronBox behaves more like a small Windmill-style control surface than a generic cron editor. The primary object is the run history and the log, not decorative scheduling chrome.',
-          feature1Title: 'Entrypoint scanning',
-          feature1Copy: 'Only scripts that can actually run are surfaced when you add a directory.',
-          feature2Title: 'Menu bar runtime',
+            "CronBox behaves like a compact local control surface, not a generic cron editor. It cares about entrypoint scanning, run state, logs, history, and recovery.",
+          feature1Title: "Selective entrypoint scanning",
+          feature1Copy:
+            "Directory adds preview candidates first; use --include or --all to choose what enters CronBox.",
+          feature2Title: "Recurring and one-shot",
           feature2Copy:
-            'Close the main window and scheduled jobs keep running from the menu bar process.',
-          feature3Title: 'Live logs',
-          feature3Copy: 'stdout and stderr stream into job history while the process is still active.',
-          feature4Title: 'Skip overlap',
+            "Use standard cron expressions, or --once schedules that disable themselves after the first trigger.",
+          feature3Title: "Live logs",
+          feature3Copy: "stdout and stderr stream into job history while the process is still active.",
+          feature4Title: "Notify and skip overlap",
           feature4Copy:
-            'If the previous scheduled run is still queued or running, the next tick is skipped.',
-          agentsTitle: 'Schedule coding agents like any other script.',
+            "Scheduled jobs send macOS notifications on completion and skip when the previous run is still active.",
+          agentsTitle: "Schedule coding agents like any other script.",
           agentsCopy:
-            'CronBox can create Codex and Claude Code task scripts under a default local workspace. That workspace carries durable rules files, so scheduled agent runs behave consistently.',
-          workspaceTitle: 'Workspace',
-          workspaceCopy: 'Agent tasks run from',
-          workspaceCopySuffix: 'by default.',
-          rulesTitle: 'Rules',
-          rulesCopy: 'and',
-          rulesCopySuffix: 'live beside the generated tasks.',
-          historyTitle: 'History',
-          historyCopy: 'Each run keeps metadata, inputs, output, error, duration, and logs together.',
-          codeTabCodex: 'codex task',
-          codeTabClaude: 'claude task',
-          codeTabLogs: 'logs',
-          cliTitle: 'Manage it from the app or terminal.',
-          cliCopyPrefix: 'The desktop app installs a companion',
+            "CronBox can create Codex and Claude Code task scripts. The default workspace carries AGENTS.md and CLAUDE.md so scheduled agent runs stay consistent.",
+          workspaceTitle: "Workspace",
+          workspaceCopy: "Agent tasks run from",
+          workspaceCopySuffix: "by default.",
+          rulesTitle: "Rules",
+          rulesCopy: "and",
+          rulesCopySuffix: "live beside the generated tasks.",
+          skillTitle: "Claude Code skill",
+          skillCopy: "Run cronbox skills install to let agents set up CronBox schedules.",
+          codeTabCodex: "codex task",
+          codeTabClaude: "claude task",
+          codeTabLogs: "logs",
+          cliTitle: "Manage it from the app or terminal.",
+          cliCopyPrefix: "The desktop app installs a companion",
           cliCopySuffix:
-            'command when possible, so local automation can be scripted without opening the UI.',
-          codeTabTerminal: 'terminal',
-          workflowTitle: 'A compact loop for recurring local work.',
+            "command when possible, so local automation can be scripted without opening the UI.",
+          codeTabTerminal: "terminal",
+          workflowTitle: "A compact loop for recurring local work.",
           workflowCopy:
-            'CronBox keeps the operational path short: scan, schedule, watch logs, inspect history, adjust, repeat.',
-          step1Title: 'Add a directory',
-          step1Copy: 'Point CronBox at a script folder. Non-runnable files stay out of the list.',
-          step2Title: 'Configure one dialog',
-          step2Copy: 'Edit alias, cron expression, timezone, args, and enabled state in one place.',
-          step3Title: 'Read the log',
+            "CronBox keeps the operational path short: scan, schedule, watch logs, inspect history, adjust, repeat.",
+          step1Title: "Add a directory",
+          step1Copy: "Point CronBox at a script folder and add only the entrypoints you want scheduled.",
+          step2Title: "Configure a schedule",
+          step2Copy: "Edit alias, cron expression, timezone, JSON args, and enabled state in one place.",
+          step3Title: "Read logs and history",
           step3Copy:
-            'Use the detail view as the source of truth for inputs, history, result, and output.',
-          footer: 'CronBox · local-first scheduling for scripts and agent tasks'
+            "Use the detail view as the source of truth for inputs, history, result, and output.",
+          footer: "CronBox · local-first scheduling for scripts and agent tasks"
         }
       };
 
       const descriptionMeta = document.querySelector('meta[name="description"]');
-      const languageButtons = document.querySelectorAll('[data-lang]');
-      const browserLanguage = navigator.language?.toLowerCase().startsWith('zh') ? 'zh' : 'en';
-      const savedLanguage = localStorage.getItem('cronbox-language');
+      const languageButtons = document.querySelectorAll("[data-lang]");
+      const copyButtons = document.querySelectorAll("[data-copy]");
+      const browserLanguage = navigator.language?.toLowerCase().startsWith("zh") ? "zh" : "en";
+      const savedLanguage = localStorage.getItem("cronbox-language");
       const initialLanguage = messages[savedLanguage] ? savedLanguage : browserLanguage;
+      let activeLanguage = initialLanguage;
 
       function setLanguage(language) {
         const dictionary = messages[language] || messages.zh;
-        document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
+        activeLanguage = language;
+        document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
         document.title = dictionary.title;
-        descriptionMeta?.setAttribute('content', dictionary.description);
+        descriptionMeta?.setAttribute("content", dictionary.description);
 
-        document.querySelectorAll('[data-i18n]').forEach((node) => {
+        document.querySelectorAll("[data-i18n]").forEach((node) => {
           const key = node.dataset.i18n;
           if (key && dictionary[key]) {
             node.textContent = dictionary[key];
           }
         });
 
-        document.querySelectorAll('[data-i18n-aria-label]').forEach((node) => {
+        document.querySelectorAll("[data-i18n-aria-label]").forEach((node) => {
           const key = node.dataset.i18nAriaLabel;
           if (key && dictionary[key]) {
-            node.setAttribute('aria-label', dictionary[key]);
+            node.setAttribute("aria-label", dictionary[key]);
           }
         });
 
         languageButtons.forEach((button) => {
           const isActive = button.dataset.lang === language;
-          button.classList.toggle('active', isActive);
-          button.setAttribute('aria-pressed', String(isActive));
+          button.classList.toggle("active", isActive);
+          button.setAttribute("aria-pressed", String(isActive));
         });
 
-        localStorage.setItem('cronbox-language', language);
+        localStorage.setItem("cronbox-language", language);
       }
 
+      copyButtons.forEach((button) => {
+        button.addEventListener("click", async () => {
+          const target = document.querySelector(button.dataset.copy || "");
+          const text = target?.dataset.copyValue || target?.textContent?.trim();
+          if (!text) return;
+
+          await navigator.clipboard.writeText(text);
+          const dictionary = messages[activeLanguage] || messages.zh;
+          const original = dictionary.copyInstall;
+          button.textContent = dictionary.copied;
+          window.setTimeout(() => {
+            button.textContent = original;
+          }, 1500);
+        });
+      });
+
       languageButtons.forEach((button) => {
-        button.addEventListener('click', () => {
-          setLanguage(button.dataset.lang || 'zh');
+        button.addEventListener("click", () => {
+          setLanguage(button.dataset.lang || "zh");
         });
       });
 
