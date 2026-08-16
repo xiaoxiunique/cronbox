@@ -75,11 +75,22 @@ fn run(args: Vec<String>) -> Result<i32, String> {
 }
 
 fn run_serve(args: &[String]) -> Result<i32, String> {
+    let mut host = std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST);
     let mut port = crate::web::DEFAULT_PORT;
     let mut open_browser = true;
+    let mut auth_token: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--host" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or("--host requires an IP address, e.g. 0.0.0.0 or 127.0.0.1")?;
+                host = value
+                    .parse::<std::net::IpAddr>()
+                    .map_err(|_| format!("invalid IP address: {value}"))?;
+            }
             "--port" => {
                 i += 1;
                 port = args
@@ -91,19 +102,37 @@ fn run_serve(args: &[String]) -> Result<i32, String> {
                     return Err("--port must be between 1 and 65535".to_string());
                 }
             }
+            "--auth-token" => {
+                i += 1;
+                let value = args.get(i).ok_or("--auth-token requires a token value")?;
+                auth_token = Some(value.clone());
+            }
             "--no-open" => open_browser = false,
             other => {
                 return Err(format!(
-                    "unknown serve option: {other}\n\nUsage: cronbox serve [--port PORT] [--no-open]"
+                    "unknown serve option: {other}\n\nUsage: cronbox serve [--host IP] [--port PORT] [--auth-token TOKEN] [--no-open]"
                 ));
             }
         }
         i += 1;
     }
 
+    let auth_token = match auth_token {
+        Some(token) if token.is_empty() => None,
+        Some(token) => Some(token),
+        None => std::env::var("CRONBOX_AUTH_TOKEN")
+            .ok()
+            .filter(|token| !token.is_empty()),
+    };
+
     crate::web::run(
         default_db_path(),
-        crate::web::ServeOptions { port, open_browser },
+        crate::web::ServeOptions {
+            host,
+            port,
+            auth_token,
+            open_browser,
+        },
     )
 }
 
@@ -1314,7 +1343,7 @@ fn print_help() {
 
 Usage:
   cronbox
-  cronbox serve [--port PORT] [--no-open]
+  cronbox serve [--host IP] [--port PORT] [--auth-token TOKEN] [--no-open]
   cronbox help
   cronbox add <script-file> [--alias DESC]
   cronbox add <directory> [--include SCRIPT] [--all]
@@ -1360,6 +1389,12 @@ Usage:
 Notes:
   Running cronbox without arguments starts the scheduler and local web console
   at http://127.0.0.1:4317. The server only listens on this computer.
+  To expose the console on a network (e.g. a Linux box), bind a non-loopback
+  address with --host 0.0.0.0 and require a password:
+    cronbox serve --host 0.0.0.0 --auth-token 'pick-a-long-random-token'
+  The token can also be set via CRONBOX_AUTH_TOKEN. Serving on a non-loopback
+  address without a token is refused. Browsers get a built-in login page; API
+  calls need `Authorization: Bearer <token>`.
   Start with `cronbox add <script-file>` to register one script, or
   `cronbox add <directory>` to preview entry scripts in a directory.
   Directory adds are selective by default: use --include relative/path.py to

@@ -8,6 +8,8 @@ import ScriptDetailView from "./views/ScriptDetailView.vue";
 import SchedulesView from "./views/SchedulesView.vue";
 import HistoryView from "./views/HistoryView.vue";
 import SettingsView from "./views/SettingsView.vue";
+import LoginView from "./views/LoginView.vue";
+import { getAuthToken } from "./lib/api";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -18,7 +20,15 @@ const router = createRouter({
     { path: "/schedules", component: SchedulesView },
     { path: "/history", component: HistoryView },
     { path: "/settings", component: SettingsView },
+    { path: "/login", component: LoginView },
   ],
+});
+
+router.beforeEach((to) => {
+  if (to.path !== "/login" && !getAuthToken()) {
+    return "/login";
+  }
+  return true;
 });
 
 createApp(App).use(router).mount("#app");

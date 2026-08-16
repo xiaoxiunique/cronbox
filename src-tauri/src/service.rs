@@ -21,6 +21,15 @@ pub fn run(args: &[String]) -> Result<i32, String> {
     run_linux(args)
 }
 
+/// Access token picked up from the environment at `service install` time and
+/// baked into the generated unit/plist so the service keeps serving behind
+/// auth even though it never sees the user's shell environment.
+fn configured_auth_token() -> Option<String> {
+    std::env::var("CRONBOX_AUTH_TOKEN")
+        .ok()
+        .filter(|token| !token.is_empty())
+}
+
 #[cfg(target_os = "macos")]
 fn run_macos(args: &[String]) -> Result<i32, String> {
     match args.first().map(String::as_str) {
@@ -59,6 +68,7 @@ fn install() -> Result<i32, String> {
         .map_err(|e| format!("cannot resolve current executable: {e}"))?
         .canonicalize()
         .map_err(|e| format!("cannot resolve executable path: {e}"))?;
+    let auth_token = configured_auth_token();
     let paths = ServicePaths::resolve()?;
     fs::create_dir_all(&paths.logs_dir)
         .map_err(|e| format!("cannot create {}: {e}", paths.logs_dir.display()))?;
@@ -67,7 +77,7 @@ fn install() -> Result<i32, String> {
             .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
     }
 
-    let plist = render_plist(&executable, &paths);
+    let plist = render_plist(&executable, &paths, auth_token.as_deref());
     let temporary = paths.plist.with_extension("plist.tmp");
     fs::write(&temporary, plist)
         .map_err(|e| format!("cannot write {}: {e}", temporary.display()))?;
@@ -89,6 +99,9 @@ fn install() -> Result<i32, String> {
     println!("CronBox service installed and started");
     println!("  executable: {}", executable.display());
     println!("  plist:      {}", paths.plist.display());
+    if auth_token.is_some() {
+        println!("  auth:       enabled (CRONBOX_AUTH_TOKEN set)");
+    }
     println!("  web:        http://127.0.0.1:4317");
     Ok(0)
 }
@@ -371,8 +384,15 @@ fn require_systemd_unit() -> Result<PathBuf, String> {
 }
 
 #[cfg(any(target_os = "linux", test))]
-fn render_systemd_unit(executable: &Path) -> Result<String, String> {
+fn render_systemd_unit(executable: &Path, auth_token: Option<&str>) -> Result<String, String> {
     let executable = quote_systemd_argument(&executable.to_string_lossy())?;
+    let environment = match auth_token {
+        Some(token) => format!(
+            "Environment=\"CRONBOX_AUTH_TOKEN={}\"\n",
+            escape_systemd_env_value(token)
+        ),
+        None => String::new(),
+    };
     Ok(format!(
         r#"[Unit]
 Description=CronBox local scheduler and web console
@@ -380,7 +400,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart={executable} serve --no-open
+{environment}ExecStart={executable} serve --no-open
 Restart=on-failure
 RestartSec=5
 KillMode=control-group
@@ -390,6 +410,16 @@ TimeoutStopSec=15
 WantedBy=default.target
 "#
     ))
+}
+
+#[cfg(any(target_os = "linux", test))]
+/// Escape a value for a double-quoted `Environment=` assignment in systemd
+/// units: backslash, double quote, and dollar must be backslash-escaped.
+fn escape_systemd_env_value(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('$', "\\$")
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -455,7 +485,14 @@ impl ServicePaths {
 }
 
 #[cfg(target_os = "macos")]
-fn render_plist(executable: &Path, paths: &ServicePaths) -> String {
+fn render_plist(executable: &Path, paths: &ServicePaths, auth_token: Option<&str>) -> String {
+    let environment = match auth_token {
+        Some(token) => format!(
+            "  <key>EnvironmentVariables</key>\n  <dict>\n    <key>CRONBOX_AUTH_TOKEN</key>\n    <string>{token}</string>\n  </dict>\n",
+            token = escape_xml(token)
+        ),
+        None => String::new(),
+    };
     format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -469,7 +506,7 @@ fn render_plist(executable: &Path, paths: &ServicePaths) -> String {
     <string>serve</string>
     <string>--no-open</string>
   </array>
-  <key>RunAtLoad</key>
+{environment}  <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
@@ -486,6 +523,7 @@ fn render_plist(executable: &Path, paths: &ServicePaths) -> String {
 "#,
         label = LABEL,
         executable = escape_xml(&executable.to_string_lossy()),
+        environment = environment,
         stdout = escape_xml(&paths.stdout.to_string_lossy()),
         stderr = escape_xml(&paths.stderr.to_string_lossy()),
     )
@@ -595,11 +633,29 @@ mod tests {
             stdout: PathBuf::from("/tmp/logs/out.log"),
             stderr: PathBuf::from("/tmp/logs/error.log"),
         };
-        let plist = render_plist(Path::new("/tmp/Cron & Box/cronbox"), &paths);
+        let plist = render_plist(Path::new("/tmp/Cron & Box/cronbox"), &paths, None);
         assert!(plist.contains("/tmp/Cron &amp; Box/cronbox"));
         assert!(plist.contains("<string>serve</string>"));
         assert!(plist.contains("<string>--no-open</string>"));
         assert!(plist.contains("<key>KeepAlive</key>"));
+        assert!(!plist.contains("EnvironmentVariables"));
+    }
+
+    #[test]
+    fn plist_embeds_auth_token_when_configured() {
+        let paths = ServicePaths {
+            plist: PathBuf::from("/tmp/service.plist"),
+            logs_dir: PathBuf::from("/tmp/logs"),
+            stdout: PathBuf::from("/tmp/logs/out.log"),
+            stderr: PathBuf::from("/tmp/logs/error.log"),
+        };
+        let plist = render_plist(
+            Path::new("/tmp/cronbox"),
+            &paths,
+            Some("tok&en<1>\"quoted\""),
+        );
+        assert!(plist.contains("<key>EnvironmentVariables</key>"));
+        assert!(plist.contains("<string>tok&amp;en&lt;1&gt;&quot;quoted&quot;</string>"));
     }
 
     #[test]
@@ -616,10 +672,22 @@ mod systemd_tests {
 
     #[test]
     fn systemd_unit_runs_the_same_web_service() {
-        let unit = render_systemd_unit(Path::new("/tmp/Cron Box/100%/cronbox")).unwrap();
+        let unit = render_systemd_unit(Path::new("/tmp/Cron Box/100%/cronbox"), None).unwrap();
         assert!(unit.contains("ExecStart=\"/tmp/Cron Box/100%%/cronbox\" serve --no-open"));
         assert!(unit.contains("Restart=on-failure"));
         assert!(unit.contains("WantedBy=default.target"));
         assert!(unit.contains("KillMode=control-group"));
+        assert!(!unit.contains("Environment="));
+    }
+
+    #[test]
+    fn systemd_unit_embeds_auth_token_when_configured() {
+        let unit = render_systemd_unit(Path::new("/tmp/cronbox"), Some("tok\"en\\$x")).unwrap();
+        assert!(unit.contains("Environment=\"CRONBOX_AUTH_TOKEN=tok\\\"en\\\\\\$x\""));
+    }
+
+    #[test]
+    fn systemd_env_escapes_backslash_quote_and_dollar() {
+        assert_eq!(escape_systemd_env_value(r#"a"b\c$d"#), r#"a\"b\\c\$d"#);
     }
 }

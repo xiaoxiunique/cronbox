@@ -60,6 +60,33 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 Running `cronbox` without arguments starts the scheduler and Web console. Use `cronbox serve --port 4400 --no-open` to choose a port or suppress automatic browser launch. `cronbox daemon` runs the scheduler without the Web console.
 
+### Remote access & authentication
+
+By default the console binds to `127.0.0.1` and requires no password — safe, because only this computer can reach it. To expose it on a network (for example, the Linux box it runs on), bind a non-loopback address **and** set an access token:
+
+```bash
+cronbox serve --host 0.0.0.0 --auth-token 'pick-a-long-random-token'
+```
+
+`CRONBOX_AUTH_TOKEN` works as an alternative to `--auth-token`. Serving on a non-loopback address without a token is refused at startup.
+
+When auth is enabled:
+
+- Browsers first see a minimal built-in login page; after signing in, the control panel loads normally.
+- Every API call must carry `Authorization: Bearer <token>`:
+
+  ```bash
+  curl -H "Authorization: Bearer $CRONBOX_AUTH_TOKEN" http://your-host:4317/api/invoke/list_schedules -H 'Content-Type: application/json' -d '{}'
+  ```
+
+- `GET /api/health` stays public (it returns only `ok` and `scheduler_active`, no data) so deployment probes can still check the service.
+
+For the background service, export the token before installing so it is baked into the LaunchAgent/systemd unit — the service keeps requiring auth without ever seeing your shell environment:
+
+```bash
+CRONBOX_AUTH_TOKEN='pick-a-long-random-token' cronbox service install
+```
+
 Manage the background service with the same commands on macOS and Linux:
 
 ```bash

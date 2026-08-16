@@ -1,10 +1,46 @@
-async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
-  const response = await fetch(`/api/invoke/${encodeURIComponent(command)}`, {
+const AUTH_TOKEN_KEY = "cronbox.authToken";
+
+export function getAuthToken(): string {
+  return localStorage.getItem(AUTH_TOKEN_KEY) ?? "";
+}
+
+export function setAuthToken(token: string): void {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+
+export function clearAuthToken(): void {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+/** Exchange the token with the server; resolves to whether it was accepted. */
+export async function loginWithToken(token: string): Promise<boolean> {
+  const response = await fetch("/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+  if (!response.ok) return false;
+  const payload = await response.json().catch(() => ({}));
+  return payload.ok === true;
+}
+
+async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
+  const token = getAuthToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(`/api/invoke/${encodeURIComponent(command)}`, {
+    method: "POST",
+    headers,
     body: JSON.stringify(args),
   });
-  const payload = await response.json();
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    clearAuthToken();
+    if (window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
+    throw new Error(payload.error || "Unauthorized");
+  }
   if (!response.ok) {
     throw new Error(payload.error || `Request failed (${response.status})`);
   }

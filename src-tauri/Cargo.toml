@@ -41,3 +41,6 @@ native-tls = { version = "0.2", features = ["vendored"] }
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 native-tls = "0.2"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
