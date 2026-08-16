@@ -1,4 +1,15 @@
-import { invoke } from "@tauri-apps/api/core";
+async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
+  const response = await fetch(`/api/invoke/${encodeURIComponent(command)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(args),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.error || `Request failed (${response.status})`);
+  }
+  return payload as T;
+}
 
 export interface WorkDir {
   id: string;
@@ -134,6 +145,9 @@ export const api = {
   cliStatus: () => invoke<string>("cli_status"),
   installCli: (force: boolean = false) => invoke<string>("install_cli", { force }),
   resolvedPath: () => invoke<string>("resolved_path"),
+
+  // True when this server owns the scheduler; false when another process owns it.
+  schedulerMode: () => invoke<boolean>("scheduler_mode"),
 
   validateCron: (cronExpr: string) => invoke<void>("validate_cron", { cronExpr }),
   upcomingRuns: (cronExpr: string, timezone: string, count: number = 5) =>

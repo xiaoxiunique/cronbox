@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from "vue";
 import { api, type ScriptFile, type WorkDir } from "../lib/api";
-import { open } from "@tauri-apps/plugin-dialog";
 import LanguageLogo from "../components/LanguageLogo.vue";
 
 const workDirs = ref<WorkDir[]>([]);
@@ -12,6 +11,8 @@ const pickerBaseDir = ref("");
 const pickerScripts = ref<ScriptFile[]>([]);
 const selectedPaths = ref<Set<string>>(new Set());
 const savingPicker = ref(false);
+const scriptFilePath = ref("");
+const directoryPath = ref("");
 
 const selectedCount = computed(() => selectedPaths.value.size);
 const resolvedPathDirs = computed(() => resolvedPath.value.split(":").filter(Boolean));
@@ -23,20 +24,18 @@ async function load() {
 }
 
 async function addDir() {
+  const path = directoryPath.value.trim();
+  if (!path) return;
   try {
-    const selected = await open({ directory: true, multiple: false });
-    if (selected) {
-      const path = selected as string;
-      const scripts = await api.previewScriptEntries(path);
-      if (scripts.length === 0) {
-        alert("No executable entry scripts were found.");
-        return;
-      }
-      pickerBaseDir.value = path;
-      pickerScripts.value = scripts;
-      selectedPaths.value = new Set();
-      showPicker.value = true;
+    const scripts = await api.previewScriptEntries(path);
+    if (scripts.length === 0) {
+      alert("No executable entry scripts were found.");
+      return;
     }
+    pickerBaseDir.value = path;
+    pickerScripts.value = scripts;
+    selectedPaths.value = new Set();
+    showPicker.value = true;
   } catch (e: any) {
     console.error("addDir error:", e);
     alert("Failed: " + e);
@@ -44,14 +43,11 @@ async function addDir() {
 }
 
 async function addFile() {
+  const path = scriptFilePath.value.trim();
+  if (!path) return;
   try {
-    const selected = await open({
-      directory: false,
-      multiple: false,
-      filters: [{ name: "Scripts", extensions: ["py", "sh", "bash", "ts", "js", "mts", "mjs", "sql"] }],
-    });
-    if (!selected) return;
-    const added = await api.addScriptFile(selected as string);
+    const added = await api.addScriptFile(path);
+    scriptFilePath.value = "";
     await load();
     if (added.entry_scripts.length === 0) {
       alert("No script was added.");
@@ -135,8 +131,14 @@ onMounted(load);
           <button @click="removeDir(wd.id)" class="btn-icon del" title="Remove">✕</button>
         </div>
         <div class="source-actions">
-          <button @click="addFile" class="btn add-btn">+ Add Script</button>
-          <button @click="addDir" class="btn">+ Add Directory</button>
+          <div class="source-entry">
+            <input v-model="scriptFilePath" type="text" placeholder="/absolute/path/to/task.sh" @keyup.enter="addFile" />
+            <button @click="addFile" class="btn primary" :disabled="!scriptFilePath.trim()">Add Script</button>
+          </div>
+          <div class="source-entry">
+            <input v-model="directoryPath" type="text" placeholder="/absolute/path/to/scripts" @keyup.enter="addDir" />
+            <button @click="addDir" class="btn" :disabled="!directoryPath.trim()">Scan Directory</button>
+          </div>
         </div>
         <div class="hint">Add a single script file, or scan a directory and choose which entry scripts to include.</div>
       </div>
@@ -154,7 +156,7 @@ onMounted(load);
       <div class="section-title">Command Line</div>
       <div class="card">
         <div class="cli-status">{{ cliStatus }}</div>
-        <button @click="installCli" class="btn add-btn">Install cronbox command</button>
+        <button @click="installCli" class="btn primary">Install cronbox command</button>
         <div class="hint">After installation, use cronbox help in Terminal to manage directories, schedules, jobs, and manual runs.</div>
       </div>
     </div>
@@ -177,7 +179,7 @@ onMounted(load);
       <div class="section-title">About</div>
       <div class="card">
         <div>Version: 0.1.0</div>
-        <div>Engine: cronbox (Rust + SQLite + Tauri 2)</div>
+        <div>Engine: cronbox (Rust + SQLite + local HTTP)</div>
       </div>
     </div>
 
@@ -222,7 +224,7 @@ onMounted(load);
 
         <div class="dialog-actions">
           <button @click="showPicker = false" class="btn">Cancel</button>
-          <button @click="saveSelectedScripts" class="btn add-btn" :disabled="savingPicker || selectedCount === 0">
+          <button @click="saveSelectedScripts" class="btn primary" :disabled="savingPicker || selectedCount === 0">
             Add Selected
           </button>
         </div>
@@ -233,23 +235,15 @@ onMounted(load);
 
 <style scoped>
 .settings-page { min-width: 0; }
-.header { margin-bottom: 20px; }
-.header h2 { font-size: 20px; margin: 0; }
+.header { margin-bottom: 24px; }
+.header h2 { font-size: 32px; font-weight: 760; letter-spacing: -0.04em; margin: 0; }
 .section { margin-bottom: 20px; }
 .section-title { font-size: 12px; font-weight: 650; color: var(--text-secondary); margin-bottom: 7px; text-transform: uppercase; letter-spacing: 0.5px; }
 .card {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.10)),
-    var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 14px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow-soft), var(--glass-highlight);
 }
 .empty-dirs { color: var(--text-secondary); font-size: 13px; text-align: center; padding: 8px; }
 .dir-row {
@@ -273,40 +267,47 @@ onMounted(load);
 }
 .source-actions {
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  flex-wrap: wrap;
 }
-.btn-icon {
-  border: 1px solid var(--border);
+.source-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.source-entry input {
+  min-width: 0;
+  padding: 8px 10px;
+  color: var(--text);
   background: var(--bg-soft);
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--text-secondary);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  min-width: 28px;
-  height: 28px;
+  font-family: monospace;
 }
-.btn-icon:hover { background: var(--bg-elevated); border-color: var(--border-strong); color: var(--text); }
-.btn-icon.del:hover { color: var(--danger); }
-.add-btn { align-self: flex-start; }
+.source-entry input:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+.btn-icon { font-size: 14px; }
+.btn-icon.del:hover { color: var(--danger); border-color: rgba(255, 59, 48, 0.24); }
 .hint { font-size: 11px; color: var(--text-secondary); }
 .cli-status {
   font-family: monospace;
   font-size: 12px;
   color: var(--text-secondary);
   overflow-wrap: anywhere;
-  background: var(--bg-code);
+  background: var(--bg-soft);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 8px 10px;
 }
 .path-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  background: var(--bg-code);
+  background: var(--bg-soft);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 8px 10px;
   max-height: 220px;
   overflow-y: auto;
@@ -317,29 +318,7 @@ onMounted(load);
   color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
-.btn {
-  padding: 6px 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-soft);
-  cursor: pointer;
-  color: var(--text);
-  font-size: 13px;
-  box-shadow: var(--glass-highlight);
-}
-.btn:not(.add-btn):hover { background: var(--bg-elevated); border-color: var(--border-strong); }
-.add-btn {
-  background: linear-gradient(135deg, var(--accent), #49a4ff);
-  color: #fff;
-  border-color: transparent;
-  box-shadow: 0 10px 26px rgba(22, 119, 255, 0.22);
-}
-.add-btn:hover {
-  background: linear-gradient(135deg, #0f6fe8, #3d98f5);
-  color: #fff;
-  border-color: transparent;
-  box-shadow: 0 12px 30px rgba(22, 119, 255, 0.30);
-}
+.btn.primary { align-self: flex-start; }
 .overlay {
   position: fixed;
   inset: 0;
@@ -355,13 +334,7 @@ onMounted(load);
   width: min(640px, calc(100vw - 40px));
   max-height: 82vh;
   overflow: hidden;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
-  border-radius: 12px;
   padding: 20px;
-  box-shadow: var(--glass-shadow), var(--glass-highlight);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
   display: flex;
   flex-direction: column;
 }
@@ -468,12 +441,5 @@ onMounted(load);
   justify-content: flex-end;
   gap: 8px;
   margin-top: 16px;
-}
-@media (prefers-color-scheme: dark) {
-  .card {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-      var(--bg-card);
-  }
 }
 </style>

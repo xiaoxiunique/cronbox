@@ -13,18 +13,28 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(db_path: PathBuf) -> Result<Self, String> {
+        Self::open(db_path, false)
+    }
+
+    pub fn new_engine(db_path: PathBuf) -> Result<Self, String> {
+        Self::open(db_path, true)
+    }
+
+    fn open(db_path: PathBuf, recover_interrupted: bool) -> Result<Self, String> {
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| format!("Cannot create data dir: {e}"))?;
         }
         let database = Database::open(&db_path).map_err(|e| e.to_string())?;
-        let interrupted = database
-            .mark_interrupted_running_jobs()
-            .map_err(|e| e.to_string())?;
-        if interrupted > 0 {
-            tracing::info!(
-                "Marked {} interrupted job(s) from a previous run",
-                interrupted
-            );
+        if recover_interrupted {
+            let interrupted = database
+                .mark_interrupted_running_jobs()
+                .map_err(|e| e.to_string())?;
+            if interrupted > 0 {
+                tracing::info!(
+                    "Marked {} interrupted job(s) from a previous run",
+                    interrupted
+                );
+            }
         }
         scheduler::initialize_schedule_times(&database)?;
 
@@ -32,6 +42,22 @@ impl AppState {
             db: Arc::new(Mutex::new(database)),
             db_path,
         })
+    }
+
+    pub fn recover_interrupted_jobs(&self) -> Result<usize, String> {
+        let interrupted = self
+            .db
+            .lock()
+            .map_err(|e| e.to_string())?
+            .mark_interrupted_running_jobs()
+            .map_err(|e| e.to_string())?;
+        if interrupted > 0 {
+            tracing::info!(
+                "Marked {} interrupted job(s) from a previous scheduler",
+                interrupted
+            );
+        }
+        Ok(interrupted)
     }
 
     /// Scan all registered sources for scripts.

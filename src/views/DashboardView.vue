@@ -1,71 +1,147 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { api, type DashboardStats, type ScheduleDistributionBucket } from "../lib/api";
+import { api, type DashboardStats, type Schedule, type Job } from "../lib/api";
 
 const stats = ref<DashboardStats | null>(null);
+const schedules = ref<Schedule[]>([]);
+const jobs = ref<Job[]>([]);
 const loading = ref(true);
 const error = ref("");
 let refreshTimer: number | null = null;
 
-const emptyStats: DashboardStats = {
-  script_total: 0,
-  schedule_total: 0,
-  enabled_schedule_total: 0,
-  recent_runs: {
-    total: 0,
-    success: 0,
-    failure: 0,
-    running: 0,
-    queued: 0,
-    cancelled: 0,
-    skipped: 0,
-  },
-  schedule_distribution: Array.from({ length: 24 }, (_, hour) => ({
-    hour: `${String(hour).padStart(2, "0")}:00`,
-    count: 0,
-  })),
+const emptyRecent = {
+  total: 0,
+  success: 0,
+  failure: 0,
+  running: 0,
+  queued: 0,
+  cancelled: 0,
+  skipped: 0,
 };
 
-const viewStats = computed(() => stats.value ?? emptyStats);
-const recent = computed(() => viewStats.value.recent_runs);
-const scheduleBuckets = computed(() => viewStats.value.schedule_distribution);
-const maxBucket = computed(() =>
-  Math.max(1, ...scheduleBuckets.value.map((bucket) => bucket.count)),
-);
-const activeBuckets = computed(() => scheduleBuckets.value.filter((bucket) => bucket.count > 0));
+const recent = computed(() => stats.value?.recent_runs ?? emptyRecent);
+const scriptTotal = computed(() => stats.value?.script_total ?? 0);
+const scheduleTotal = computed(() => stats.value?.schedule_total ?? 0);
+const enabledTotal = computed(() => stats.value?.enabled_schedule_total ?? 0);
+const activeNow = computed(() => recent.value.running + recent.value.queued);
+
 const successRate = computed(() => {
   if (recent.value.total === 0) return 0;
   return Math.round((recent.value.success / recent.value.total) * 100);
 });
-const failureRate = computed(() => {
-  if (recent.value.total === 0) return 0;
-  return Math.round((recent.value.failure / recent.value.total) * 100);
-});
+
 const runMixStyle = computed(() => {
   const total = Math.max(1, recent.value.total);
-  const success = (recent.value.success / total) * 100;
-  const failure = (recent.value.failure / total) * 100;
-  const active = ((recent.value.running + recent.value.queued) / total) * 100;
   return {
-    "--success-width": `${success}%`,
-    "--failure-width": `${failure}%`,
-    "--active-width": `${active}%`,
+    "--success-width": `${(recent.value.success / total) * 100}%`,
+    "--failure-width": `${(recent.value.failure / total) * 100}%`,
+    "--active-width": `${(activeNow.value / total) * 100}%`,
   };
 });
+
+const upcoming = computed(() =>
+  schedules.value
+    .filter((s) => s.enabled && s.next_run_at)
+    .sort((a, b) => (a.next_run_at ?? "").localeCompare(b.next_run_at ?? ""))
+    .slice(0, 6),
+);
+
+const recentJobs = computed(() =>
+  [...jobs.value]
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, 8),
+);
+
+const nextRunLabel = computed(() => {
+  const next = upcoming.value[0]?.next_run_at;
+  return next ? relTime(next) : "none scheduled";
+});
+
+function baseName(path: string): string {
+  return path.split("/").pop() || path;
+}
+
+function detailUrl(scriptPath: string, baseDir: string) {
+  return { path: "/scripts/detail", query: { path: scriptPath, baseDir } };
+}
+
+function relTime(iso: string | null): string {
+  if (!iso) return "—";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "—";
+  const diff = t - Date.now();
+  const abs = Math.abs(diff);
+  if (abs < 45000) return diff >= 0 ? "soon" : "just now";
+  const m = Math.round(abs / 60000);
+  let label: string;
+  if (m < 60) label = `${m}m`;
+  else if (m < 1440) label = `${Math.round(m / 60)}h`;
+  else label = `${Math.round(m / 1440)}d`;
+  return diff >= 0 ? `in ${label}` : `${label} ago`;
+}
+
+function absTime(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function fmtDuration(ms: number | null): string {
+  if (ms == null) return "";
+  if (ms < 1000) return `${ms}ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(s < 10 ? 1 : 0)}s`;
+  const m = Math.floor(s / 60);
+  return `${m}m${Math.round(s % 60)}s`;
+}
+
+function statusMeta(status: string): { label: string; cls: string } {
+  switch (status) {
+    case "success":
+      return { label: "Success", cls: "ok" };
+    case "failure":
+      return { label: "Failure", cls: "err" };
+    case "interrupted":
+      return { label: "Interrupted", cls: "err" };
+    case "running":
+      return { label: "Running", cls: "active" };
+    case "queued":
+      return { label: "Queued", cls: "active" };
+    case "skipped":
+      return { label: "Skipped", cls: "muted" };
+    case "cancelled":
+      return { label: "Cancelled", cls: "muted" };
+    default:
+      return { label: status, cls: "muted" };
+  }
+}
+
+function jobTime(job: Job): string | null {
+  return job.completed_at ?? job.started_at ?? job.created_at;
+}
 
 async function load() {
   try {
     error.value = "";
-    stats.value = await api.dashboardStats();
+    const [s, sch, j] = await Promise.all([
+      api.dashboardStats(),
+      api.listSchedules(),
+      api.listJobs(12),
+    ]);
+    stats.value = s;
+    schedules.value = sch;
+    jobs.value = j;
   } catch (e: any) {
     error.value = String(e);
   } finally {
     loading.value = false;
   }
-}
-
-function barHeight(bucket: ScheduleDistributionBucket) {
-  return `${Math.max(8, Math.round((bucket.count / maxBucket.value) * 100))}%`;
 }
 
 onMounted(() => {
@@ -80,115 +156,88 @@ onUnmounted(() => {
 
 <template>
   <div class="dashboard">
-    <header class="hero glass-card">
-      <div class="hero-copy">
-        <div class="eyebrow">Local scheduler control room</div>
-        <h1>CronBox at a glance</h1>
-        <p>
-          A compact overview of runnable scripts, recent execution health, and where current
-          schedules are concentrated.
+    <header class="head">
+      <div class="head-copy">
+        <h1>Home</h1>
+        <p class="status-line">
+          {{ scriptTotal }} scripts · {{ enabledTotal }}/{{ scheduleTotal }} schedules enabled ·
+          next run <strong>{{ nextRunLabel }}</strong>
         </p>
       </div>
-      <button class="btn-icon refresh" title="Refresh dashboard" @click="load">↻</button>
+      <button class="btn-icon" title="Refresh" @click="load">↻</button>
     </header>
 
     <div v-if="error" class="error">{{ error }}</div>
 
-    <section class="metrics">
-      <article class="metric glass-card">
-        <span class="metric-label">Scripts</span>
-        <strong>{{ loading ? "—" : viewStats.script_total }}</strong>
-        <span class="metric-note">runnable entrypoints</span>
+    <section class="kpis">
+      <article class="kpi">
+        <span class="kpi-label">Scripts</span>
+        <strong>{{ loading ? "—" : scriptTotal }}</strong>
+        <span class="kpi-note">runnable entrypoints</span>
       </article>
-      <article class="metric glass-card">
-        <span class="metric-label">Runs / 24h</span>
+      <article class="kpi">
+        <span class="kpi-label">Schedules</span>
+        <strong>{{ loading ? "—" : enabledTotal }}<small>/{{ scheduleTotal }}</small></strong>
+        <span class="kpi-note">enabled / total</span>
+      </article>
+      <article class="kpi">
+        <span class="kpi-label">Runs / 24h</span>
         <strong>{{ loading ? "—" : recent.total }}</strong>
-        <span class="metric-note">{{ recent.running + recent.queued }} active now</span>
+        <span class="kpi-note">{{ activeNow }} active now</span>
       </article>
-      <article class="metric glass-card success">
-        <span class="metric-label">Success / 24h</span>
-        <strong>{{ loading ? "—" : recent.success }}</strong>
-        <span class="metric-note">{{ successRate }}% of recent runs</span>
-      </article>
-      <article class="metric glass-card danger">
-        <span class="metric-label">Failure / 24h</span>
-        <strong>{{ loading ? "—" : recent.failure }}</strong>
-        <span class="metric-note">{{ failureRate }}% of recent runs</span>
-      </article>
-    </section>
-
-    <section class="overview-grid">
-      <article class="run-health glass-card">
-        <div class="section-head">
-          <div>
-            <h2>Recent run health</h2>
-            <p>Last 24 hours across manual and scheduled jobs.</p>
-          </div>
-        </div>
-
-        <div class="run-mix" :style="runMixStyle">
+      <article class="kpi">
+        <span class="kpi-label">Success / 24h</span>
+        <strong :class="{ good: successRate >= 90, warn: recent.failure > 0 }">
+          {{ loading ? "—" : successRate }}<small v-if="!loading">%</small>
+        </strong>
+        <div class="mix" :style="runMixStyle" :title="`${recent.success} ok · ${recent.failure} failed · ${activeNow} active`">
           <span class="mix-success"></span>
           <span class="mix-failure"></span>
           <span class="mix-active"></span>
         </div>
+      </article>
+    </section>
 
-        <div class="status-grid">
-          <div>
-            <span class="status-dot ok"></span>
-            <span>Success</span>
-            <strong>{{ recent.success }}</strong>
-          </div>
-          <div>
-            <span class="status-dot err"></span>
-            <span>Failure</span>
-            <strong>{{ recent.failure }}</strong>
-          </div>
-          <div>
-            <span class="status-dot active"></span>
-            <span>Running / queued</span>
-            <strong>{{ recent.running + recent.queued }}</strong>
-          </div>
-          <div>
-            <span class="status-dot muted"></span>
-            <span>Skipped / cancelled</span>
-            <strong>{{ recent.skipped + recent.cancelled }}</strong>
-          </div>
+    <section class="panels">
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Upcoming runs</h2>
+          <span class="count">{{ upcoming.length }}</span>
         </div>
+        <ul v-if="upcoming.length" class="list">
+          <router-link v-for="s in upcoming" :key="s.id" :to="detailUrl(s.script_path, s.base_dir)" class="row up">
+            <div class="row-main">
+              <span class="name">{{ baseName(s.script_path) }}</span>
+              <span class="sub">{{ s.cron_expr }}</span>
+            </div>
+            <div class="row-right">
+              <span class="rel">{{ relTime(s.next_run_at) }}</span>
+              <span class="abs">{{ absTime(s.next_run_at) }}</span>
+            </div>
+          </router-link>
+        </ul>
+        <div v-else class="empty">No enabled schedules yet.</div>
       </article>
 
-      <article class="schedule-chart glass-card">
-        <div class="section-head">
-          <div>
-            <h2>Schedule distribution</h2>
-            <p>
-              Enabled schedules grouped by the hour of their next run. {{ viewStats.enabled_schedule_total }}
-              of {{ viewStats.schedule_total }} schedules are enabled.
-            </p>
-          </div>
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Recent activity</h2>
+          <span class="count">{{ recentJobs.length }}</span>
         </div>
-
-        <div class="chart" aria-label="Enabled schedule distribution by next run hour">
-          <div
-            v-for="bucket in scheduleBuckets"
-            :key="bucket.hour"
-            class="bar-wrap"
-            :title="`${bucket.hour}: ${bucket.count}`"
-          >
-            <div class="bar-track">
-              <div class="bar" :style="{ height: barHeight(bucket) }" :class="{ empty: bucket.count === 0 }"></div>
+        <ul v-if="recentJobs.length" class="list">
+          <router-link v-for="job in recentJobs" :key="job.id" :to="detailUrl(job.script_path, job.base_dir)" class="row job">
+            <span class="pill" :class="statusMeta(job.status).cls">{{ statusMeta(job.status).label }}</span>
+            <div class="row-main">
+              <span class="name">{{ baseName(job.script_path) }}</span>
+              <span v-if="job.error" class="sub err-text">{{ job.error }}</span>
             </div>
-            <span v-if="bucket.hour.endsWith('00') && Number(bucket.hour.slice(0, 2)) % 6 === 0">
-              {{ bucket.hour.slice(0, 2) }}
-            </span>
-          </div>
-        </div>
-
-        <div v-if="activeBuckets.length" class="bucket-list">
-          <span v-for="bucket in activeBuckets" :key="bucket.hour">
-            {{ bucket.hour }} · {{ bucket.count }}
-          </span>
-        </div>
-        <div v-else class="empty-chart">No enabled schedules yet.</div>
+            <div class="row-right">
+              <span class="rel">{{ relTime(jobTime(job)) }}</span>
+              <span class="abs">{{ fmtDuration(job.duration_ms) }}</span>
+            </div>
+          </router-link>
+        </ul>
+        <div v-else class="empty">No runs recorded yet.</div>
       </article>
     </section>
   </div>
@@ -198,347 +247,219 @@ onUnmounted(() => {
 .dashboard {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   min-width: 0;
 }
 
-.hero {
+.head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 18px;
-  min-height: 156px;
-  padding: 24px;
-  border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(22, 119, 255, 0.18), rgba(52, 199, 89, 0.07)),
-    var(--bg-card);
-  overflow: hidden;
-  position: relative;
+  gap: 16px;
 }
-
-.hero::after {
-  content: "";
-  position: absolute;
-  inset: auto 22px 20px auto;
-  width: 160px;
-  height: 72px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background:
-    linear-gradient(90deg, transparent 0 18%, rgba(22, 119, 255, 0.28) 18% 24%, transparent 24% 48%, rgba(52, 199, 89, 0.28) 48% 56%, transparent 56%),
-    rgba(255, 255, 255, 0.10);
-  opacity: 0.45;
-  transform: skewX(-8deg);
-}
-
-.hero-copy {
-  max-width: 620px;
-  position: relative;
-  z-index: 1;
-}
-
-.eyebrow {
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 760;
-  letter-spacing: 0.02em;
-  margin-bottom: 12px;
-  text-transform: uppercase;
-}
-
-h1,
-h2,
-p {
+.head h1 {
   margin: 0;
+  font-size: 34px;
+  font-weight: 760;
+  letter-spacing: -0.045em;
 }
-
-h1 {
-  font-size: clamp(34px, 5vw, 58px);
-  line-height: 0.96;
-  letter-spacing: 0;
-}
-
-.hero p,
-.section-head p,
-.metric-note {
+.status-line {
+  margin: 4px 0 0;
+  font-size: 13px;
   color: var(--text-secondary);
 }
-
-.hero p {
-  margin-top: 14px;
-  max-width: 560px;
-  line-height: 1.52;
+.status-line strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.btn-icon {
+  flex: none;
 }
 
-.refresh {
-  position: relative;
-  z-index: 1;
+.error {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 59, 48, 0.3);
+  background: rgba(255, 59, 48, 0.08);
+  color: var(--danger);
+  font-size: 13px;
 }
 
-.metrics {
+.kpis {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
 }
-
-.metric {
-  min-height: 128px;
-  padding: 16px;
-  border-radius: 8px;
+.kpi {
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-}
-
-.metric-label {
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.metric strong {
-  display: block;
-  font-size: 40px;
-  line-height: 1;
-  margin-top: 18px;
-}
-
-.metric.success strong {
-  color: var(--success);
-}
-
-.metric.danger strong {
-  color: var(--danger);
-}
-
-.metric-note {
-  font-size: 12px;
-  margin-top: 10px;
-}
-
-.overview-grid {
-  display: grid;
-  grid-template-columns: minmax(320px, 0.68fr) minmax(420px, 1fr);
-  gap: 12px;
-}
-
-.run-health,
-.schedule-chart {
-  border-radius: 8px;
-  padding: 18px;
-}
-
-.section-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
-}
-
-.section-head h2 {
-  font-size: 18px;
-  line-height: 1.2;
-}
-
-.section-head p {
-  margin-top: 6px;
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.run-mix {
-  height: 12px;
-  border-radius: 999px;
-  overflow: hidden;
-  display: flex;
-  background: var(--bg-soft);
-  border: 1px solid var(--border);
-}
-
-.run-mix span {
+  gap: 4px;
   min-width: 0;
 }
-
+.kpi-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.kpi strong {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.kpi strong small {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.kpi strong.good {
+  color: var(--success);
+}
+.kpi strong.warn {
+  color: var(--text);
+}
+.kpi-note {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+.mix {
+  display: flex;
+  height: 5px;
+  margin-top: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg-soft);
+}
+.mix span {
+  height: 100%;
+}
 .mix-success {
   width: var(--success-width);
   background: var(--success);
 }
-
 .mix-failure {
   width: var(--failure-width);
   background: var(--danger);
 }
-
 .mix-active {
   width: var(--active-width);
   background: var(--accent);
 }
 
-.status-grid {
+.panels {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 18px;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
-
-.status-grid div {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-soft);
-  font-size: 13px;
-}
-
-.status-grid strong {
-  font-size: 18px;
-}
-
-.status-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-}
-
-.status-dot.ok {
-  background: var(--success);
-}
-
-.status-dot.err {
-  background: var(--danger);
-}
-
-.status-dot.active {
-  background: var(--accent);
-}
-
-.status-dot.muted {
-  background: var(--text-secondary);
-}
-
-.chart {
-  display: grid;
-  grid-template-columns: repeat(24, minmax(0, 1fr));
-  gap: 5px;
-  height: 190px;
-  align-items: end;
-  padding: 10px 0 0;
-}
-
-.bar-wrap {
-  display: grid;
-  grid-template-rows: 1fr 18px;
+.panel {
+  padding: 6px 6px 8px;
   min-width: 0;
-  height: 100%;
 }
-
-.bar-track {
+.panel-head {
   display: flex;
-  align-items: end;
-  min-height: 0;
-  border-radius: 999px;
-  background: var(--bg-soft);
-  overflow: hidden;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 8px;
 }
-
-.bar {
-  width: 100%;
-  border-radius: 999px 999px 0 0;
-  background: linear-gradient(180deg, var(--accent), rgba(52, 199, 89, 0.76));
-  min-height: 8px;
-  transition: height 0.22s ease;
-}
-
-.bar.empty {
-  background: rgba(105, 113, 124, 0.22);
-}
-
-.bar-wrap span {
-  align-self: end;
-  color: var(--text-secondary);
-  font-size: 10px;
-  text-align: center;
-}
-
-.bucket-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 14px;
-}
-
-.bucket-list span,
-.empty-chart {
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-soft);
-  color: var(--text-secondary);
-  font-size: 11px;
-  padding: 4px 8px;
-}
-
-.empty-chart {
-  width: fit-content;
-  margin-top: 14px;
-}
-
-.btn-icon {
-  border: 1px solid var(--border);
-  background: var(--bg-soft);
-  cursor: pointer;
-  font-size: 16px;
-  color: var(--text-secondary);
-  border-radius: 8px;
-  min-width: 32px;
-  height: 32px;
-}
-
-.btn-icon:hover {
-  color: var(--text);
-  background: var(--bg-elevated);
-  border-color: var(--border-strong);
-}
-
-.error {
-  border: 1px solid rgba(255, 59, 48, 0.24);
-  border-radius: 8px;
-  background: rgba(255, 59, 48, 0.08);
-  color: var(--danger);
-  padding: 10px 12px;
+.panel-head h2 {
+  margin: 0;
   font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+}
+.count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-soft);
+  border-radius: 999px;
+  padding: 1px 8px;
 }
 
-@media (max-width: 1040px) {
-  .metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .overview-grid {
-    grid-template-columns: 1fr;
-  }
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+.row + .row {
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+}
+.row:hover {
+  background: var(--bg-soft);
+}
+.row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.name {
+  font-size: 13px;
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sub {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sub.err-text {
+  color: var(--danger);
+}
+.row-right {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.rel {
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.abs {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 720px) {
-  .hero {
-    min-height: auto;
-  }
+.pill {
+  flex: none;
+  width: 74px;
+}
 
-  .hero::after {
-    display: none;
-  }
+.empty {
+  padding: 22px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
 
-  .metrics,
-  .status-grid {
+@media (max-width: 900px) {
+  .kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .panels {
     grid-template-columns: 1fr;
-  }
-
-  .chart {
-    gap: 3px;
   }
 }
 </style>

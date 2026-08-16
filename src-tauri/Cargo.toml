@@ -2,23 +2,22 @@
 name = "cronbox"
 version = "0.1.0"
 edition = "2021"
-description = "Local-first menu bar scheduler for scripts and coding-agent tasks."
+description = "Local-first CLI scheduler with a browser-based control panel."
 license = "MIT"
 repository = "https://github.com/xiaoxiunique/cronbox"
 homepage = "https://github.com/xiaoxiunique/cronbox"
 
 [lib]
 name = "cronbox_lib"
-crate-type = ["lib", "cdylib", "staticlib"]
 
 [[bin]]
 name = "cronbox"
 path = "src/main.rs"
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
-tauri-plugin-dialog = "2"
-tauri-plugin-shell = "2"
+axum = "0.8"
+mime_guess = "2"
+rust-embed = "8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
@@ -27,7 +26,6 @@ tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 tokio-postgres = { version = "0.7", features = ["with-serde_json-1", "with-chrono-0_4"] }
 postgres-native-tls = "0.5"
-native-tls = "0.2"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"
@@ -35,9 +33,11 @@ tracing = "0.1"
 thiserror = "2"
 dirs-next = "2"
 
-[build-dependencies]
-tauri-build = { version = "2", features = [] }
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["fs"] }
 
-[features]
-default = ["custom-protocol"]
-custom-protocol = ["tauri/custom-protocol"]
+[target.'cfg(target_os = "linux")'.dependencies]
+native-tls = { version = "0.2", features = ["vendored"] }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+native-tls = "0.2"

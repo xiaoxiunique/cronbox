@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
 import { api, type ScriptFile, type Schedule, type Job, type WorkDir, type ScriptParam } from "../lib/api";
-import { open } from "@tauri-apps/plugin-dialog";
 import LanguageLogo from "../components/LanguageLogo.vue";
 import EnvEditor from "../components/EnvEditor.vue";
 import { formatDuration } from "../lib/format";
@@ -9,6 +8,8 @@ import { formatDuration } from "../lib/format";
 const scripts = ref<ScriptFile[]>([]);
 const schedules = ref<Schedule[]>([]);
 const workDirs = ref<WorkDir[]>([]);
+const jobs = ref<Job[]>([]);
+const search = ref("");
 
 // Run panel
 const runningJob = ref<Job | null>(null);
@@ -43,7 +44,6 @@ const agentName = ref("daily-codex-task");
 const agentPrompt = ref("Summarize the current repository status and suggest the next concrete action.");
 const agentWorkspace = ref<WorkDir | null>(null);
 const agentBaseDir = ref("");
-const agentBrowsedDirs = ref<string[]>([]);
 const creatingAgent = ref(false);
 const preparingWorkspace = ref(false);
 
@@ -51,31 +51,79 @@ function isAgentTask(s: ScriptFile): boolean {
   return s.path.startsWith("cronbox/codex/") || s.path.startsWith("cronbox/claude/");
 }
 
+const filteredScripts = computed(() => {
+  const q = search.value.trim().toLowerCase();
+  if (!q) return scripts.value;
+  return scripts.value.filter(
+    (s) =>
+      (s.alias || "").toLowerCase().includes(q) ||
+      s.path.toLowerCase().includes(q) ||
+      s.base_dir.toLowerCase().includes(q)
+  );
+});
+
 const taskSections = computed(() => {
   const sections: { kind: string; title: string; scripts: ScriptFile[] }[] = [];
-  const agents = scripts.value.filter(isAgentTask);
+  const agents = filteredScripts.value.filter(isAgentTask);
   if (agents.length > 0) sections.push({ kind: "agent", title: "Agent Tasks", scripts: agents });
-  const codes = scripts.value.filter((s) => !isAgentTask(s));
+  const codes = filteredScripts.value.filter((s) => !isAgentTask(s));
   if (codes.length > 0) sections.push({ kind: "code", title: "Code Scripts", scripts: codes });
   return sections;
 });
+
+// Most recent job per script → inline last-run status in the list.
+const lastJobByScript = computed(() => {
+  const map = new Map<string, Job>();
+  for (const j of jobs.value) {
+    const key = j.base_dir + "\n" + j.script_path;
+    const prev = map.get(key);
+    if (!prev || j.created_at > prev.created_at) map.set(key, j);
+  }
+  return map;
+});
+function lastJob(s: ScriptFile): Job | null {
+  return lastJobByScript.value.get(s.base_dir + "\n" + s.path) ?? null;
+}
+function jobTime(job: Job): string | null {
+  return job.completed_at ?? job.started_at ?? job.created_at;
+}
+function runDotClass(job: Job | null): string {
+  if (!job) return "none";
+  switch (job.status) {
+    case "success":
+      return "ok";
+    case "failure":
+    case "interrupted":
+      return "err";
+    case "running":
+    case "queued":
+      return "active";
+    default:
+      return "muted";
+  }
+}
+function relTime(iso: string | null): string {
+  if (!iso) return "";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "";
+  const m = Math.round((Date.now() - t) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
 
 async function load() {
   workDirs.value = await api.listWorkDirs();
   scripts.value = await api.scanScripts();
   schedules.value = await api.listSchedules();
+  jobs.value = await api.listJobs(300);
 }
 
 const agentTitle = computed(() => agentKind.value === "codex" ? "Codex Task" : "Claude Task");
 const agentCommand = computed(() => agentKind.value === "codex" ? "codex exec" : "claude -p");
 const agentFolder = computed(() => agentKind.value === "codex" ? "codex" : "claude");
-const agentDirChoices = computed(() => {
-  const paths = new Set<string>(workDirs.value.map((d) => d.path));
-  for (const d of agentBrowsedDirs.value) paths.add(d);
-  if (agentBaseDir.value) paths.add(agentBaseDir.value);
-  return Array.from(paths);
-});
-
 async function openAgentDialog(kind: AgentKind) {
   agentKind.value = kind;
   agentName.value = kind === "codex" ? "daily-codex-task" : "daily-claude-task";
@@ -86,25 +134,12 @@ async function openAgentDialog(kind: AgentKind) {
   try {
     agentWorkspace.value = await api.ensureAgentWorkspace();
     await load();
-    agentBrowsedDirs.value = [];
     agentBaseDir.value = agentWorkspace.value?.path ?? "";
     showAgentDialog.value = true;
   } catch (e: any) {
     alert(e);
   } finally {
     preparingWorkspace.value = false;
-  }
-}
-
-async function browseAgentDir() {
-  try {
-    const selected = await open({ directory: true, multiple: false });
-    if (!selected) return;
-    const path = selected as string;
-    if (!agentBrowsedDirs.value.includes(path)) agentBrowsedDirs.value.push(path);
-    agentBaseDir.value = path;
-  } catch (e: any) {
-    alert(e);
   }
 }
 
@@ -349,6 +384,7 @@ onUnmounted(stopPolling);
   <div class="scripts-page">
     <div class="header">
       <h2>Scripts</h2>
+      <input v-model="search" class="search" type="search" placeholder="Search scripts…" />
       <button @click="openAgentDialog('codex')" class="btn agent-btn" :disabled="preparingWorkspace">
         {{ preparingWorkspace && agentKind === 'codex' ? 'Preparing...' : 'Codex Task' }}
       </button>
@@ -369,6 +405,9 @@ onUnmounted(stopPolling);
     </div>
 
     <template v-else>
+      <div v-if="search && taskSections.length === 0" class="empty">
+        No scripts match “{{ search }}”.
+      </div>
       <section v-for="section in taskSections" :key="section.kind" class="task-section">
         <div class="task-section-head">
           <span>{{ section.title }}</span>
@@ -382,6 +421,14 @@ onUnmounted(stopPolling);
               <div class="name">{{ s.alias }}</div>
               <div class="full-path">{{ s.base_dir }}/{{ s.path }}</div>
             </router-link>
+            <span
+              v-if="lastJob(s)"
+              class="last-run"
+              :class="runDotClass(lastJob(s))"
+              :title="`Last run: ${lastJob(s)!.status}`"
+            >
+              <span class="run-dot"></span>{{ relTime(jobTime(lastJob(s)!)) }}
+            </span>
             <button @click="openEditDialog(s)" class="btn config-btn" title="Edit script settings">⚙</button>
             <div class="schedule-badge" v-if="getSchedule(s.path, s.base_dir)">
               <span :class="['dot', getSchedule(s.path, s.base_dir)!.enabled ? 'on' : 'off']"></span>
@@ -493,10 +540,10 @@ onUnmounted(stopPolling);
         <h3>Create {{ agentTitle }}</h3>
         <label>Target directory</label>
         <div class="dir-picker">
-          <select v-model="agentBaseDir" class="mono">
-            <option v-for="d in agentDirChoices" :key="d" :value="d">{{ d }}</option>
-          </select>
-          <button type="button" @click="browseAgentDir" class="btn">Browse…</button>
+          <input v-model="agentBaseDir" list="agent-directory-choices" class="mono" placeholder="/absolute/path/to/project" />
+          <datalist id="agent-directory-choices">
+            <option v-for="d in workDirs" :key="d.id" :value="d.path" />
+          </datalist>
         </div>
         <div class="hint">
           CronBox writes <span class="mono">cronbox/{{ agentFolder }}/&lt;task&gt;.sh</span> into this directory and runs <span class="mono">{{ agentCommand }}</span> there.
@@ -518,7 +565,7 @@ onUnmounted(stopPolling);
           <button
             @click="createAgentTask"
             class="btn primary"
-            :disabled="creatingAgent || !agentName.trim() || !agentPrompt.trim()"
+            :disabled="creatingAgent || !agentBaseDir.trim() || !agentName.trim() || !agentPrompt.trim()"
           >
             {{ creatingAgent ? 'Creating...' : 'Create & Run' }}
           </button>
@@ -591,16 +638,28 @@ onUnmounted(stopPolling);
 </template>
 
 <style scoped>
-.scripts-page { display: flex; flex-direction: column; height: calc(100vh - 48px); min-width: 0; }
-.header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.header h2 { flex: 1; font-size: 20px; margin: 0; letter-spacing: 0; }
+.scripts-page { display: flex; flex-direction: column; height: calc(100vh - 144px); min-width: 0; }
+.header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.header h2 { font-size: 32px; font-weight: 760; margin: 0; letter-spacing: -0.04em; }
+.search {
+  flex: 1;
+  max-width: 300px;
+  margin-right: auto;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--text);
+  font-size: 13px;
+}
 .empty {
   text-align: center;
   padding: 48px 20px;
   color: var(--text-secondary);
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   box-shadow: var(--glass-shadow-soft), var(--glass-highlight);
@@ -608,7 +667,7 @@ onUnmounted(stopPolling);
 .empty p { margin: 4px 0; }
 .hint { font-size: 12px; margin-top: 8px; color: var(--text-secondary); }
 
-.task-section + .task-section { margin-top: 16px; }
+.task-section + .task-section { margin-top: 24px; }
 .task-section-head {
   display: flex;
   align-items: center;
@@ -618,8 +677,8 @@ onUnmounted(stopPolling);
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  padding: 0 2px;
-  margin: 0 0 8px;
+  padding: 0 4px;
+  margin: 0 0 10px;
 }
 .task-section-count {
   background: var(--bg-soft);
@@ -630,31 +689,66 @@ onUnmounted(stopPolling);
   font-weight: 650;
 }
 
-.list { display: flex; flex-direction: column; gap: 5px; }
+.list {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--card-shadow);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  overflow: hidden;
+}
 .row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.10)),
-    var(--bg-card);
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+  gap: 12px;
+  padding: 11px 16px;
+  transition: background 0.16s ease;
 }
-.row:hover {
-  background: var(--bg-elevated);
-  border-color: var(--border-strong);
-  transform: translateY(-1px);
-  box-shadow: var(--glass-shadow-soft), var(--glass-highlight);
+.row + .row { border-top: 1px solid var(--border); }
+.row:hover { background: var(--bg-soft); }
+.row.active { background: var(--accent-soft); }
+.row .btn.run,
+.row .btn.quick-run,
+.row .btn.config-btn {
+  min-height: 32px;
+  min-width: 32px;
+  padding: 4px 9px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
-.row.active {
-  border-color: var(--accent-strong);
-  background:
-    linear-gradient(135deg, var(--accent-soft), rgba(52, 199, 89, 0.08)),
-    var(--bg-elevated);
+.row .btn.run:hover,
+.row .btn.quick-run:hover,
+.row .btn.config-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: transparent;
+  transform: none;
+  box-shadow: none;
 }
+.last-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.run-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--muted-2);
+  flex: none;
+}
+.last-run.ok .run-dot { background: var(--success); }
+.last-run.err { color: var(--danger); }
+.last-run.err .run-dot { background: var(--danger); }
+.last-run.active .run-dot { background: var(--accent); }
 .info { flex: 1; min-width: 0; }
 .script-link {
   color: inherit;
@@ -727,59 +821,20 @@ onUnmounted(stopPolling);
   accent-color: var(--accent);
 }
 
-.btn {
-  padding: 5px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-soft);
-  cursor: pointer;
-  color: var(--text);
-  font-size: 13px;
-  box-shadow: var(--glass-highlight);
-}
-.btn:not(.primary):hover { background: var(--bg-elevated); border-color: var(--border-strong); }
-.btn:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
-.btn.run { color: var(--success); font-size: 16px; min-width: 34px; }
-.btn.quick-run { color: var(--warning); font-size: 14px; min-width: 34px; }
+.btn.run { color: var(--success); font-size: 16px; min-width: 34px; padding: 5px 12px; }
+.btn.quick-run { color: var(--warning); font-size: 14px; min-width: 34px; padding: 5px 12px; }
 .btn.agent-btn { color: var(--accent); font-weight: 650; }
 .btn.claude-btn { color: #8b5cf6; }
 .btn.config-btn {
   color: var(--text-secondary);
   font-size: 14px;
   min-width: 30px;
-  padding: 4px 8px;
+  padding: 5px 10px;
 }
 .btn.config-btn:hover { color: var(--accent); }
-.btn.primary {
-  background: linear-gradient(135deg, var(--accent), #49a4ff);
-  color: #fff;
-  border-color: transparent;
-  box-shadow: 0 10px 26px rgba(22, 119, 255, 0.24);
-}
-.btn.primary:hover {
-  background: linear-gradient(135deg, #0f6fe8, #3d98f5);
-  color: #fff;
-  border-color: transparent;
-  box-shadow: 0 12px 30px rgba(22, 119, 255, 0.32);
-}
-.btn.primary:disabled { opacity: 0.5; }
-.btn-icon {
-  border: 1px solid var(--border);
-  background: var(--bg-soft);
-  cursor: pointer;
-  font-size: 16px;
-  color: var(--text-secondary);
-  border-radius: 8px;
-  min-width: 30px;
-  height: 30px;
-}
-.btn-icon:hover { color: var(--text); background: var(--bg-elevated); border-color: var(--border-strong); }
 
 .run-panel {
   margin-top: 12px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
   overflow: hidden;
   flex: 1;
   min-height: 150px;
@@ -823,16 +878,10 @@ onUnmounted(stopPolling);
   z-index: 100;
 }
 .dialog {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
-  border-radius: 12px;
   padding: 24px;
   width: 420px;
   max-height: 80vh;
   overflow-y: auto;
-  box-shadow: var(--glass-shadow), var(--glass-highlight);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
 }
 .agent-dialog { width: 520px; }
 .edit-dialog { width: 520px; }
@@ -916,22 +965,18 @@ onUnmounted(stopPolling);
   gap: 8px;
   align-items: center;
 }
-.dir-picker select {
+.dir-picker input {
   flex: 1;
   min-width: 0;
-}
-.dir-picker .btn {
-  white-space: nowrap;
-  flex-shrink: 0;
 }
 .dialog h3 { margin: 0 0 16px; font-size: 16px; }
 .dialog label { display: block; font-size: 12px; color: var(--text-secondary); margin: 12px 0 4px; }
 .dialog input, .dialog textarea, .dialog select {
   width: 100%;
-  padding: 8px;
+  padding: 8px 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
   color: var(--text);
   font-size: 13px;
 }
@@ -964,15 +1009,8 @@ onUnmounted(stopPolling);
 .param-row { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
 .param-label { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px; margin-bottom: 3px; }
 .req { color: var(--danger); }
-.param-type { font-size: 10px; color: var(--text-secondary); font-weight: 400; background: var(--bg-code); padding: 1px 5px; border-radius: 6px; }
+.param-type { font-size: 10px; color: var(--text-secondary); font-weight: 400; background: var(--bg-soft); border: 1px solid var(--border); padding: 1px 5px; border-radius: 6px; }
 .param-desc { font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
-.param-input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-soft); color: var(--text); font-size: 13px; }
+.param-input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-subtle); color: var(--text); font-size: 13px; }
 .param-check { font-size: 13px; display: flex; align-items: center; gap: 6px; }
-@media (prefers-color-scheme: dark) {
-  .row {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-      var(--bg-card);
-  }
-}
 </style>

@@ -1,5 +1,6 @@
 import { createApp } from "vue";
 import { createRouter, createWebHistory } from "vue-router";
+import "./assets/main.css";
 import App from "./App.vue";
 import DashboardView from "./views/DashboardView.vue";
 import ScriptsView from "./views/ScriptsView.vue";

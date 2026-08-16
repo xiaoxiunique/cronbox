@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-labelledby="c1-title">
+  <title id="c1-title">CronBox Logo</title>
+  <defs>
+    <linearGradient id="c1g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded box -->
+  <rect x="10" y="10" width="100" height="100" rx="22" fill="url(#c1g)"/>
+  <!-- Clock face -->
+  <circle cx="60" cy="55" r="28" fill="none" stroke="#fff" stroke-width="3.5" opacity="0.95"/>
+  <!-- Hour marks at 12, 3, 6, 9 -->
+  <line x1="60" y1="30" x2="60" y2="35" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="85" y1="55" x2="80" y2="55" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="60" y1="80" x2="60" y2="75" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="35" y1="55" x2="40" y2="55" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Clock hands — minute points to 2, hour points to 10 -->
+  <line x1="60" y1="55" x2="60" y2="38" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+  <line x1="60" y1="55" x2="48" y2="44" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+  <!-- Center dot -->
+  <circle cx="60" cy="55" r="3" fill="#fff"/>
+  <!-- Terminal prompt "> _" at the bottom -->
+  <text x="38" y="102" font-family="'SF Mono','Menlo','Consolas',monospace" font-size="16" font-weight="700" fill="#fff" opacity="0.9">&gt;_</text>
+</svg>

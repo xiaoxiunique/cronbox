@@ -2,10 +2,8 @@ name: Build Packages
 
 on:
   push:
-    branches:
-      - main
-    tags:
-      - "v*"
+    branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -18,23 +16,27 @@ concurrency:
 jobs:
   package:
     name: ${{ matrix.name }}
-    runs-on: ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: macOS universal
-            platform: macos-latest
-            args: --target universal-apple-darwin --no-sign
-            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+          - name: macOS arm64
+            runner: macos-15
+            target: aarch64-apple-darwin
+            asset: CronBox-macos-aarch64.tar.gz
+          - name: macOS x64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            asset: CronBox-macos-x86_64.tar.gz
           - name: Linux x64
-            platform: ubuntu-22.04
-            args: --bundles deb,appimage
-            rust-targets: x86_64-unknown-linux-gnu
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            asset: CronBox-linux-x86_64.tar.gz
           - name: Windows x64
-            platform: windows-latest
-            args: --bundles nsis,msi
-            rust-targets: x86_64-pc-windows-msvc
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            asset: CronBox-windows-x86_64.zip
 
     steps:
       - name: Checkout
@@ -48,66 +50,43 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.rust-targets }}
+          targets: ${{ matrix.target }}
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
 
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            curl \
-            file \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev \
-            patchelf \
-            wget
-
-      - name: Install frontend dependencies
+      - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build workflow artifacts
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        uses: tauri-apps/tauri-action@v0.6.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tauriScript: bun run tauri
-          args: ${{ matrix.args }}
+      - name: Build frontend
+        run: bun run build
 
-      - name: Upload package artifacts
+      - name: Build binary
+        run: cargo build --release --locked --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
+
+      - name: Package Unix binary
+        if: runner.os != 'Windows'
+        shell: bash
+        run: tar -czf "${{ matrix.asset }}" -C "src-tauri/target/${{ matrix.target }}/release" cronbox
+
+      - name: Package Windows binary
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path "src-tauri/target/${{ matrix.target }}/release/cronbox.exe" -DestinationPath "${{ matrix.asset }}"
+
+      - name: Upload workflow artifact
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         uses: actions/upload-artifact@v4
         with:
-          name: CronBox-${{ matrix.name }}
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
           if-no-files-found: error
-          path: |
-            src-tauri/target/release/bundle/**/*.deb
-            src-tauri/target/release/bundle/**/*.AppImage
-            src-tauri/target/release/bundle/**/*.msi
-            src-tauri/target/release/bundle/**/*.exe
-            src-tauri/target/*/release/bundle/**/*.dmg
-            src-tauri/target/*/release/bundle/**/*.app.tar.gz
 
-      - name: Build and publish draft release
+      - name: Upload release asset
         if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-        uses: tauri-apps/tauri-action@v0.6.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
-          tauriScript: bun run tauri
-          args: ${{ matrix.args }}
-          tagName: ${{ github.ref_name }}
-          releaseName: CronBox ${{ github.ref_name }}
-          releaseBody: Download the packaged CronBox installers from the assets below.
-          releaseDraft: true
-          prerelease: false
-          assetNamePattern: CronBox-[version]-[platform]-[arch][ext]
+          draft: true
+          files: ${{ matrix.asset }}

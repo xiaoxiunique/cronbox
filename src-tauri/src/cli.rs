@@ -10,6 +10,7 @@ use crate::models::{
 };
 use crate::scheduler;
 use crate::state::{scan_directory_entries, script_from_file, AppState};
+use tokio_util::sync::CancellationToken;
 
 pub fn default_db_path() -> PathBuf {
     dirs_next::data_dir()
@@ -37,8 +38,7 @@ pub fn run_from_env() -> i32 {
 
 fn run(args: Vec<String>) -> Result<i32, String> {
     if args.is_empty() {
-        print_help();
-        return Ok(0);
+        return run_serve(&[]);
     }
 
     match args[0].as_str() {
@@ -63,10 +63,48 @@ fn run(args: Vec<String>) -> Result<i32, String> {
         "jobs" | "job" => run_jobs(&args[1..]),
         "skills" | "skill" => run_skills(&args[1..]),
         "run" => run_script(&args[1..]),
+        "serve" => run_serve(&args[1..]),
+        "daemon" => run_daemon(&args[1..]),
+        "service" => crate::service::run(&args[1..]),
+        "export" => run_export(&args[1..]),
+        "import" => run_import(&args[1..]),
         other => Err(format!(
             "unknown command: {other}\n\nRun `cronbox help` for usage."
         )),
     }
+}
+
+fn run_serve(args: &[String]) -> Result<i32, String> {
+    let mut port = crate::web::DEFAULT_PORT;
+    let mut open_browser = true;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--port" => {
+                i += 1;
+                port = args
+                    .get(i)
+                    .ok_or("--port requires a number")?
+                    .parse::<u16>()
+                    .map_err(|_| "--port must be between 1 and 65535".to_string())?;
+                if port == 0 {
+                    return Err("--port must be between 1 and 65535".to_string());
+                }
+            }
+            "--no-open" => open_browser = false,
+            other => {
+                return Err(format!(
+                    "unknown serve option: {other}\n\nUsage: cronbox serve [--port PORT] [--no-open]"
+                ));
+            }
+        }
+        i += 1;
+    }
+
+    crate::web::run(
+        default_db_path(),
+        crate::web::ServeOptions { port, open_browser },
+    )
 }
 
 fn open_db() -> Result<Database, String> {
@@ -649,6 +687,329 @@ fn run_script(args: &[String]) -> Result<i32, String> {
     Ok(if success { 0 } else { result.exit_code.max(1) })
 }
 
+/// Scheduler-only mode for an always-on host. Foreground; stops on Ctrl-C or SIGTERM.
+fn run_daemon(args: &[String]) -> Result<i32, String> {
+    if let Some(unexpected) = args.iter().find(|a| !a.is_empty()) {
+        return Err(format!(
+            "daemon takes no arguments, got: {unexpected}\n\nUsage: cronbox daemon"
+        ));
+    }
+
+    // Resolve the login-shell PATH so scripts run with the same tools the user
+    // has in their terminal.
+    executor::env::init_effective_path_from_login_shell();
+
+    let db_path = default_db_path();
+    // Only one process may run the scheduler against the shared DB.
+    let lock_path = db_path.with_file_name("scheduler.lock");
+    let lease = match crate::scheduler_lock::try_acquire(&lock_path)? {
+        Some(lease) => lease,
+        None => {
+            return Err(
+                "another CronBox scheduler is already running (the Web console service or \
+                        another daemon). Stop it first, then retry."
+                    .to_string(),
+            );
+        }
+    };
+    let app_state = AppState::new_engine(db_path)?;
+    let db = app_state.db.clone();
+    let db_p = app_state.db_path.clone();
+
+    let runtime = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+    runtime.block_on(async move {
+        let _lease = lease; // held for the lifetime of the loop
+        let cancel = CancellationToken::new();
+        spawn_shutdown_signal(cancel.clone());
+
+        println!("cronbox daemon started");
+        println!("  db: {}", db_p.display());
+        println!("  scheduler ticking every 1s · press Ctrl-C to stop");
+
+        scheduler::run_scheduler(db, db_p, cancel).await;
+        println!("cronbox daemon stopped");
+    });
+
+    Ok(0)
+}
+
+/// Cancel the scheduler on Ctrl-C (all platforms) or SIGTERM (unix).
+fn spawn_shutdown_signal(cancel: CancellationToken) {
+    tokio::spawn(async move {
+        #[cfg(unix)]
+        {
+            use tokio::signal::unix::{signal, SignalKind};
+            match signal(SignalKind::terminate()) {
+                Ok(mut term) => {
+                    tokio::select! {
+                        _ = tokio::signal::ctrl_c() => {}
+                        _ = term.recv() => {}
+                    }
+                }
+                Err(_) => {
+                    let _ = tokio::signal::ctrl_c().await;
+                }
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = tokio::signal::ctrl_c().await;
+        }
+        cancel.cancel();
+    });
+}
+
+// ── export / import (portable, home-relative) ──
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ExportBundle {
+    cronbox_export_version: u32,
+    exported_at: String,
+    /// The $HOME the paths were relativized from, for human reference.
+    home: String,
+    work_dirs: Vec<ExportWorkDir>,
+    script_entries: Vec<ExportEntry>,
+    script_aliases: Vec<ExportAlias>,
+    schedules: Vec<ExportSchedule>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ExportWorkDir {
+    path: String,
+    scan_mode: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ExportEntry {
+    base_dir: String,
+    script_path: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ExportAlias {
+    base_dir: String,
+    script_path: String,
+    alias: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ExportSchedule {
+    id: String,
+    base_dir: String,
+    script_path: String,
+    cron_expr: String,
+    timezone: String,
+    args: String,
+    env: String,
+    enabled: bool,
+    one_shot: bool,
+}
+
+fn home_dir_string() -> Result<String, String> {
+    dirs_next::home_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "cannot resolve home directory".to_string())
+}
+
+/// Rewrite an absolute path under `$HOME` to a portable `~/...` form. Paths not
+/// under `$HOME` are returned unchanged (and stay machine-specific).
+fn portable_path(abs: &str, home: &str) -> String {
+    if abs == home {
+        "~".to_string()
+    } else if let Some(rest) = abs.strip_prefix(&format!("{home}/")) {
+        format!("~/{rest}")
+    } else {
+        abs.to_string()
+    }
+}
+
+/// Expand a portable `~/...` path against the current platform's `$HOME`.
+fn local_path(portable: &str, home: &str) -> String {
+    if portable == "~" {
+        home.to_string()
+    } else if let Some(rest) = portable.strip_prefix("~/") {
+        format!("{home}/{rest}")
+    } else {
+        portable.to_string()
+    }
+}
+
+fn run_export(args: &[String]) -> Result<i32, String> {
+    let mut out: Option<String> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--out" | "-o" => {
+                i += 1;
+                out = Some(args.get(i).ok_or("--out requires a file path")?.clone());
+            }
+            other => return Err(format!("unknown export option: {other}")),
+        }
+        i += 1;
+    }
+
+    let home = home_dir_string()?;
+    let db = open_db()?;
+    let work_dirs = db.list_work_dirs().map_err(|e| e.to_string())?;
+    let entries = db.list_script_entries().map_err(|e| e.to_string())?;
+    let aliases = db.list_script_aliases().map_err(|e| e.to_string())?;
+    let schedules = db.list_schedules().map_err(|e| e.to_string())?;
+
+    let bundle = ExportBundle {
+        cronbox_export_version: 1,
+        exported_at: chrono::Utc::now().to_rfc3339(),
+        home: home.clone(),
+        work_dirs: work_dirs
+            .iter()
+            .map(|w| ExportWorkDir {
+                path: portable_path(&w.path, &home),
+                scan_mode: w.scan_mode.clone(),
+            })
+            .collect(),
+        script_entries: entries
+            .iter()
+            .map(|e| ExportEntry {
+                base_dir: portable_path(&e.base_dir, &home),
+                script_path: e.script_path.clone(),
+            })
+            .collect(),
+        script_aliases: aliases
+            .iter()
+            .map(|a| ExportAlias {
+                base_dir: portable_path(&a.base_dir, &home),
+                script_path: a.script_path.clone(),
+                alias: a.alias.clone(),
+            })
+            .collect(),
+        schedules: schedules
+            .iter()
+            .map(|s| ExportSchedule {
+                id: s.id.clone(),
+                base_dir: portable_path(&s.base_dir, &home),
+                script_path: s.script_path.clone(),
+                cron_expr: s.cron_expr.clone(),
+                timezone: s.timezone.clone(),
+                args: s.args.clone(),
+                env: s.env.clone(),
+                enabled: s.enabled,
+                one_shot: s.one_shot,
+            })
+            .collect(),
+    };
+
+    let json = serde_json::to_string_pretty(&bundle).map_err(|e| e.to_string())?;
+    match out {
+        Some(path) => {
+            fs::write(&path, json).map_err(|e| format!("cannot write {path}: {e}"))?;
+            eprintln!(
+                "exported {} schedule(s), {} dir(s) to {path}",
+                bundle.schedules.len(),
+                bundle.work_dirs.len()
+            );
+        }
+        None => println!("{json}"),
+    }
+    Ok(0)
+}
+
+fn run_import(args: &[String]) -> Result<i32, String> {
+    let file = args
+        .first()
+        .ok_or("usage: cronbox import <file.json>  (use - for stdin)")?;
+
+    let raw = if file == "-" {
+        use std::io::Read;
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .map_err(|e| format!("cannot read stdin: {e}"))?;
+        buf
+    } else {
+        fs::read_to_string(file).map_err(|e| format!("cannot read {file}: {e}"))?
+    };
+
+    let bundle: ExportBundle =
+        serde_json::from_str(&raw).map_err(|e| format!("invalid export file: {e}"))?;
+    if bundle.cronbox_export_version != 1 {
+        return Err(format!(
+            "unsupported export version {} (this build understands version 1)",
+            bundle.cronbox_export_version
+        ));
+    }
+
+    let home = home_dir_string()?;
+    let db = open_db()?;
+
+    for w in &bundle.work_dirs {
+        let path = local_path(&w.path, &home);
+        if w.scan_mode == "manual" {
+            db.add_work_dir_manual(&path)
+        } else {
+            db.add_work_dir(&path)
+        }
+        .map_err(|e| e.to_string())?;
+    }
+    for e in &bundle.script_entries {
+        db.add_script_entry(&local_path(&e.base_dir, &home), &e.script_path)
+            .map_err(|err| err.to_string())?;
+    }
+    for a in &bundle.script_aliases {
+        db.set_script_alias(
+            &local_path(&a.base_dir, &home),
+            &a.script_path,
+            Some(a.alias.as_str()),
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let mut missing: Vec<String> = Vec::new();
+    for s in &bundle.schedules {
+        let base_dir = local_path(&s.base_dir, &home);
+        let full = PathBuf::from(&base_dir).join(&s.script_path);
+        if !full.exists() {
+            missing.push(full.display().to_string());
+        }
+        let next_run_at = if s.enabled {
+            scheduler::calculate_next_run(&s.cron_expr, &s.timezone).ok()
+        } else {
+            None
+        };
+        let schedule = Schedule {
+            id: s.id.clone(),
+            script_path: s.script_path.clone(),
+            base_dir,
+            cron_expr: s.cron_expr.clone(),
+            timezone: s.timezone.clone(),
+            args: s.args.clone(),
+            env: s.env.clone(),
+            enabled: s.enabled,
+            one_shot: s.one_shot,
+            next_run_at,
+            last_run_at: None,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        };
+        db.import_schedule(&schedule).map_err(|e| e.to_string())?;
+    }
+
+    eprintln!(
+        "imported {} schedule(s), {} dir(s)",
+        bundle.schedules.len(),
+        bundle.work_dirs.len()
+    );
+    if !missing.is_empty() {
+        eprintln!(
+            "warning: {} script file(s) not found at the mapped path — sync the script files too:",
+            missing.len()
+        );
+        for path in &missing {
+            eprintln!("  {path}");
+        }
+    }
+    Ok(0)
+}
+
 fn combined_logs(result: &ExecutionResult) -> String {
     if result.stderr.is_empty() {
         result.stdout.clone()
@@ -701,11 +1062,8 @@ pub fn cli_status_text(target: Option<PathBuf>) -> String {
 }
 
 fn default_cli_target() -> PathBuf {
-    // Use the resolved login-shell PATH: a Finder-launched GUI app otherwise
-    // sees only a minimal PATH (/usr/bin:/bin:...) with no Homebrew dir, and
-    // would fall through to a root-owned location. Among the known bin dirs,
-    // prefer one that is writable without sudo — on Apple Silicon
-    // `/usr/local/bin` is root-owned.
+    // Among common bin directories on the resolved login-shell PATH, prefer one
+    // writable without sudo. On Apple Silicon `/usr/local/bin` is often root-owned.
     let path = crate::executor::env::effective_path();
     for dir in env::split_paths(&path) {
         let s = dir.to_string_lossy();
@@ -955,6 +1313,8 @@ fn print_help() {
         r#"CronBox CLI
 
 Usage:
+  cronbox
+  cronbox serve [--port PORT] [--no-open]
   cronbox help
   cronbox add <script-file> [--alias DESC]
   cronbox add <directory> [--include SCRIPT] [--all]
@@ -986,10 +1346,20 @@ Usage:
 
   cronbox run <base-dir> <script-path> [--args JSON]
 
+  cronbox daemon
+
+  cronbox service install
+  cronbox service status
+  cronbox service start|stop|restart
+  cronbox service logs [--follow]
+  cronbox service uninstall
+
+  cronbox export [--out FILE]
+  cronbox import <file.json>
+
 Notes:
-  CronBox is a local-first menu-bar scheduler for scripts and coding-agent tasks.
-  The CLI shares the same local data as the desktop app, but it does not open or
-  control the UI.
+  Running cronbox without arguments starts the scheduler and local web console
+  at http://127.0.0.1:4317. The server only listens on this computer.
   Start with `cronbox add <script-file>` to register one script, or
   `cronbox add <directory>` to preview entry scripts in a directory.
   Directory adds are selective by default: use --include relative/path.py to
@@ -999,7 +1369,7 @@ Notes:
   `cronbox schedules add <script-file> <cron> [--dir DIR]` to schedule one.
   Quote cron expressions, for example: "0 * * * *"
   Use --args @file.json to load JSON args from a file.
-  Scheduled jobs run while the CronBox app is open or hidden in the menu bar.
+  Scheduled jobs run while `cronbox` or `cronbox daemon` remains active.
 "#
     );
 }

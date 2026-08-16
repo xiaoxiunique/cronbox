@@ -307,7 +307,7 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 8px;
   min-width: 0;
-  height: calc(100vh - 48px);
+  height: calc(100vh - 144px);
 }
 .topbar {
   display: flex;
@@ -321,8 +321,10 @@ onUnmounted(() => {
 }
 .title-wrap h2 {
   margin: 0;
-  font-size: 18px;
-  line-height: 1.15;
+  font-size: 27px;
+  font-weight: 740;
+  letter-spacing: -0.035em;
+  line-height: 1.12;
 }
 .subtitle {
   margin-top: 2px;
@@ -333,12 +335,10 @@ onUnmounted(() => {
   white-space: nowrap;
   font-family: monospace;
 }
-.history-panel,
-.log-viewer,
 .empty {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   box-shadow: var(--glass-shadow-soft), var(--glass-highlight);
@@ -354,7 +354,6 @@ onUnmounted(() => {
 .ok { color: var(--success); }
 .err { color: var(--danger); }
 .muted { color: var(--text-secondary); }
-.badge,
 .count-chip {
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -497,7 +496,7 @@ onUnmounted(() => {
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
-  color: var(--text);
+  color: #e6e6ea;
 }
 .empty,
 .empty-inline,
@@ -520,50 +519,6 @@ onUnmounted(() => {
   font-family: monospace;
   font-size: 11px;
 }
-.btn,
-.btn-icon {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-soft);
-  color: var(--text);
-  cursor: pointer;
-  box-shadow: var(--glass-highlight);
-}
-.btn { padding: 6px 12px; font-size: 13px; }
-.btn.sm { padding: 5px 10px; font-size: 12px; }
-.btn-icon {
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
-  font-size: 16px;
-}
-.btn:not(.primary):hover,
-.btn-icon:hover {
-  background: var(--bg-elevated);
-  border-color: var(--border-strong);
-}
-.btn.primary {
-  background: linear-gradient(135deg, var(--accent), #49a4ff);
-  color: #fff;
-  border-color: transparent;
-  box-shadow: 0 10px 26px rgba(22, 119, 255, 0.22);
-}
-.btn.primary:hover {
-  background: linear-gradient(135deg, #0f6fe8, #3d98f5);
-  color: #fff;
-  border-color: transparent;
-  box-shadow: 0 12px 30px rgba(22, 119, 255, 0.30);
-}
-.btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.st-ok { background: rgba(52,199,89,0.15); color: var(--success); border-color: rgba(52,199,89,0.22); }
-.st-err { background: rgba(255,59,48,0.15); color: var(--danger); border-color: rgba(255,59,48,0.22); }
-.st-run { background: rgba(0,113,227,0.15); color: var(--accent); border-color: rgba(0,113,227,0.22); }
-.st-queue { background: rgba(134,134,139,0.15); color: var(--text-secondary); border-color: rgba(134,134,139,0.20); }
-.st-cancel { background: rgba(255,149,0,0.15); color: var(--warning); border-color: rgba(255,149,0,0.22); }
-.st-skip { background: rgba(134,134,139,0.12); color: var(--text-secondary); border-color: rgba(134,134,139,0.20); }
 @media (max-width: 1200px) {
   .history-shell {
     grid-template-columns: minmax(240px, 38%) minmax(0, 1fr);

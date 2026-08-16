@@ -6,7 +6,7 @@
     <title>CronBox - 本地优先的脚本调度器</title>
     <meta
       name="description"
-      content="CronBox 是一个本地优先的 macOS 菜单栏调度器，用来管理脚本、cron job 和 coding agent 任务。"
+      content="CronBox 是一个本地优先的命令行调度器，通过本机网页管理脚本、cron job 和 coding agent 任务。"
     />
     <style>
       :root {
@@ -908,15 +908,15 @@
           <div>
             <div class="eyebrow">
               <span class="pulse"></span>
-              <span data-i18n="eyebrow">macOS 菜单栏里的本地脚本调度器</span>
+              <span data-i18n="eyebrow">命令行启动，本机网页管理</span>
             </div>
             <h1 data-i18n="heroTitle">CronBox</h1>
-            <p class="hero-subtitle" data-i18n="heroSubtitle">Local cron, visible logs, menu bar runtime.</p>
+            <p class="hero-subtitle" data-i18n="heroSubtitle">Local cron, visible logs, browser control.</p>
             <p class="hero-copy" data-i18n="heroCopy">
               CronBox 扫描本地脚本入口，按 cron 或 one-shot 触发运行，持续记录日志、结果和历史。适合那些不该塞进服务器、但又不能靠记忆执行的本地自动化。
             </p>
             <div class="actions">
-              <a class="button primary" href="#install" data-i18n="heroPrimary">安装 macOS 版本</a>
+              <a class="button primary" href="#install" data-i18n="heroPrimary">安装命令行版本</a>
               <a class="button" href="#cli" data-i18n="heroSecondary">查看 CLI</a>
             </div>
             <div class="install-strip" aria-label="Install command" data-i18n-aria-label="installCommandLabel">
@@ -945,7 +945,7 @@
             <div class="window-top">
               <div class="traffic"><span></span><span></span><span></span></div>
               <div class="window-title" data-i18n="windowTitle">CronBox / Schedules</div>
-              <div class="menu-status">menu bar active</div>
+              <div class="menu-status">127.0.0.1:4317</div>
             </div>
             <div class="preview-layout">
               <div class="sidebar">
@@ -1000,20 +1000,23 @@
 
         <section class="section" id="install">
           <div class="section-head">
-            <h2 data-i18n="installTitle">一条命令安装到 macOS。</h2>
+            <h2 data-i18n="installTitle">一条命令安装到 macOS 或 Linux。</h2>
             <p data-i18n="installCopy">
-              安装脚本会下载最新发布版，把 CronBox.app 放进 /Applications，并把 cronbox 命令链接到一个可写的 bin 目录。
+              安装脚本会下载自包含二进制，并注册 macOS LaunchAgent 或 Linux systemd 用户服务。
             </p>
           </div>
           <div class="install-panel terminal">
             <div class="code-tabs">
               <span data-i18n="codeTabInstall">install</span>
-              <span>macOS</span>
+              <span>macOS / Linux</span>
             </div>
-            <pre>curl -fsSL https://raw.githubusercontent.com/xiaoxiunique/cronbox/main/scripts/install-macos.sh | bash
+            <pre># macOS
+curl -fsSL https://raw.githubusercontent.com/xiaoxiunique/cronbox/main/scripts/install-macos.sh | bash
 
-open /Applications/CronBox.app
-cronbox help</pre>
+# Linux x64
+curl -fsSL https://raw.githubusercontent.com/xiaoxiunique/cronbox/main/scripts/install-linux.sh | bash
+
+cronbox service status</pre>
           </div>
         </section>
 
@@ -1093,7 +1096,7 @@ cd ~/.cronbox
         <section class="section" id="cli">
           <div class="section-head">
             <h2 data-i18n="cliTitle">可以从 App 或终端管理。</h2>
-            <p><span data-i18n="cliCopyPrefix">桌面 App 会在可行时自动安装配套的</span> <code>cronbox</code> <span data-i18n="cliCopySuffix">命令，这样本地自动化不打开 UI 也能脚本化管理。</span></p>
+            <p><span data-i18n="cliCopyPrefix">启动</span> <code>cronbox</code> <span data-i18n="cliCopySuffix">命令即可运行调度器并打开本机管理页。</span></p>
           </div>
           <div class="code-panel terminal">
             <div class="code-tabs"><span data-i18n="codeTabTerminal">终端</span></div>
@@ -1141,7 +1144,7 @@ cronbox run ~/scripts daily-report.py --args '{"date":"today"}'</pre>
       const messages = {
         zh: {
           title: "CronBox - 本地优先的脚本调度器",
-          description: "CronBox 是一个本地优先的 macOS 菜单栏调度器，用来管理脚本、cron job 和 coding agent 任务。",
+          description: "CronBox 是一个本地优先的命令行调度器，通过本机网页管理脚本、cron job 和 coding agent 任务。",
           navLabel: "主导航",
           previewLabel: "CronBox 界面预览",
           installCommandLabel: "安装命令",
@@ -1150,12 +1153,12 @@ cronbox run ~/scripts daily-report.py --args '{"date":"today"}'</pre>
           navFeatures: "功能",
           navAgents: "Agent 任务",
           navCli: "CLI",
-          eyebrow: "macOS 菜单栏里的本地脚本调度器",
+          eyebrow: "命令行启动，本机网页管理",
           heroTitle: "CronBox",
-          heroSubtitle: "本地 cron、可见日志、菜单栏后台运行。",
+          heroSubtitle: "本地 cron、可见日志、浏览器控制台。",
           heroCopy:
             "CronBox 扫描本地脚本入口，按 cron 或 one-shot 触发运行，持续记录日志、结果和历史。适合那些不该塞进服务器、但又不能靠记忆执行的本地自动化。",
-          heroPrimary: "安装 macOS 版本",
+          heroPrimary: "安装命令行版本",
           heroSecondary: "查看 CLI",
           copyInstall: "复制",
           copied: "已复制",
@@ -1173,9 +1176,9 @@ cronbox run ~/scripts daily-report.py --args '{"date":"today"}'</pre>
           badgeNext: "下次 09:00",
           badgeRunning: "运行中",
           badgeEnabled: "已启用",
-          installTitle: "一条命令安装到 macOS。",
+          installTitle: "一条命令安装到 macOS 或 Linux。",
           installCopy:
-            "安装脚本会下载最新发布版，把 CronBox.app 放进 /Applications，并把 cronbox 命令链接到一个可写的 bin 目录。",
+            "安装脚本会下载自包含二进制，并注册 macOS LaunchAgent 或 Linux systemd 用户服务。",
           codeTabInstall: "安装",
           featuresTitle: "为本地运维脚本而设计。",
           featuresCopy:
@@ -1202,9 +1205,9 @@ cronbox run ~/scripts daily-report.py --args '{"date":"today"}'</pre>
           codeTabCodex: "codex 任务",
           codeTabClaude: "claude 任务",
           codeTabLogs: "日志",
-          cliTitle: "可以从 App 或终端管理。",
-          cliCopyPrefix: "桌面 App 会在可行时自动安装配套的",
-          cliCopySuffix: "命令，这样本地自动化不打开 UI 也能脚本化管理。",
+          cliTitle: "终端和本机网页共用一套状态。",
+          cliCopyPrefix: "启动",
+          cliCopySuffix: "命令即可运行调度器并打开本机管理页。",
           codeTabTerminal: "终端",
           workflowTitle: "一个紧凑的本地周期任务闭环。",
           workflowCopy: "CronBox 把操作路径压短：扫描、调度、看日志、查历史、调整，然后重复。",
@@ -1219,7 +1222,7 @@ cronbox run ~/scripts daily-report.py --args '{"date":"today"}'</pre>
         en: {
           title: "CronBox - Local-first script scheduler",
           description:
-            "CronBox is a local-first macOS menu bar scheduler for scripts, cron jobs, and coding-agent tasks.",
+            "CronBox is a local-first CLI scheduler with a browser control panel for scripts, cron jobs, and coding-agent tasks.",
           navLabel: "Primary navigation",
           previewLabel: "CronBox interface preview",
           installCommandLabel: "Install command",
@@ -1228,12 +1231,12 @@ cronbox run ~/scripts daily-report.py --args '{"date":"today"}'</pre>
           navFeatures: "Features",
           navAgents: "Agent tasks",
           navCli: "CLI",
-          eyebrow: "Local script scheduler for the macOS menu bar",
+          eyebrow: "Start in the terminal, manage in the browser",
           heroTitle: "CronBox",
-          heroSubtitle: "Local cron, visible logs, menu bar runtime.",
+          heroSubtitle: "Local cron, visible logs, browser control.",
           heroCopy:
             "CronBox scans local script entrypoints, runs them on cron or one-shot schedules, and keeps logs, results, and history together. It is built for local automation that should not live on a server or in your memory.",
-          heroPrimary: "Install for macOS",
+          heroPrimary: "Install the CLI",
           heroSecondary: "View CLI",
           copyInstall: "Copy",
           copied: "Copied",
@@ -1251,9 +1254,9 @@ cronbox run ~/scripts daily-report.py --args '{"date":"today"}'</pre>
           badgeNext: "next 09:00",
           badgeRunning: "running",
           badgeEnabled: "enabled",
-          installTitle: "Install on macOS with one command.",
+          installTitle: "Install on macOS or Linux with one command.",
           installCopy:
-            "The installer downloads the latest published release, copies CronBox.app into /Applications, and links the cronbox command into a writable bin directory.",
+            "The installer downloads a self-contained binary and registers a macOS LaunchAgent or Linux systemd user service.",
           codeTabInstall: "install",
           featuresTitle: "Built for local operational scripts.",
           featuresCopy:
@@ -1283,10 +1286,10 @@ cronbox run ~/scripts daily-report.py --args '{"date":"today"}'</pre>
           codeTabCodex: "codex task",
           codeTabClaude: "claude task",
           codeTabLogs: "logs",
-          cliTitle: "Manage it from the app or terminal.",
-          cliCopyPrefix: "The desktop app installs a companion",
+          cliTitle: "One state shared by the terminal and local Web console.",
+          cliCopyPrefix: "Start the",
           cliCopySuffix:
-            "command when possible, so local automation can be scripted without opening the UI.",
+            "command to run the scheduler and open its browser control panel.",
           codeTabTerminal: "terminal",
           workflowTitle: "A compact loop for recurring local work.",
           workflowCopy:

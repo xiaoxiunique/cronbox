@@ -1,7 +1,7 @@
 {
   "name": "cronbox",
   "version": "0.1.0",
-  "description": "Local-first menu bar scheduler for scripts and coding-agent tasks.",
+  "description": "Local-first CLI scheduler with a browser-based control panel.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -15,19 +15,14 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
-    "tauri": "tauri",
-    "install-macos": "bash scripts/install-macos.sh",
+    "server": "cargo run --manifest-path src-tauri/Cargo.toml -- serve --no-open",
     "install-cli": "bash scripts/install-cli.sh"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-dialog": "^2",
-    "@tauri-apps/plugin-shell": "^2",
     "vue": "^3.5",
     "vue-router": "^4"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2",
     "@vitejs/plugin-vue": "^5",
     "typescript": "^5.6",
     "vite": "^6",

@@ -5,7 +5,7 @@ description: Schedule a script to run on a recurring local cron via CronBox. Wri
 
 # CronBox — schedule scripts on the user's local machine
 
-CronBox is a local-first scheduler. The user's menu-bar app holds the SQLite DB and runs scheduled jobs; the `cronbox` CLI is how you create and manage them. This skill is how you, the AI, set up a scheduled task end-to-end without the user having to touch CronBox's UI.
+CronBox is a local-first scheduler. The `cronbox` service owns the SQLite DB, runs scheduled jobs, and serves a control panel at `http://127.0.0.1:4317`; CLI subcommands create and manage tasks. This skill sets up a scheduled task end-to-end without requiring manual Web console work.
 
 ## Step 0 — Verify CronBox is reachable
 
@@ -16,10 +16,10 @@ cronbox dirs list
 ```
 
 - Exit 0 → CronBox is installed. Proceed.
-- `command not found: cronbox` → tell the user the CronBox menu-bar app isn't installed (or the CLI symlink isn't on PATH). Stop.
-- DB errors → tell the user to launch the CronBox menu-bar app once (it creates the DB on first launch). Stop.
+- `command not found: cronbox` → tell the user the CronBox binary isn't installed or isn't on PATH. Stop.
+- DB errors → report the exact error and stop.
 
-**Important — surface this to the user every time you finish setting up a schedule:** CronBox only fires scheduled jobs while its menu-bar app is open. If the user quits it, schedules pause.
+**Important — verify this every time you finish setting up a schedule:** run `cronbox service status`. An installed macOS or Linux user service starts with the user's session and restarts automatically. Without the service, `cronbox` or `cronbox daemon` must remain running.
 
 ## Step 1 — Write the script in the user's project
 
@@ -67,7 +67,7 @@ Make the script self-contained:
 
 ```bash
 # Register the script with a short human description (~5-8 words).
-# The description shows in CronBox's UI in place of the filename, so the user
+# The description shows in CronBox's Web console in place of the filename, so the user
 # can scan their list and tell at a glance what each task does.
 # This also adds the script's parent directory in MANUAL mode and registers
 # just this one file, so the rest of the user's codebase is not pulled in.
@@ -97,13 +97,15 @@ Show the user the schedule and the next fire time:
 cronbox schedules list
 ```
 
-In your final reply: state (a) the script path you created, (b) the cron expression, (c) the timezone, (d) the next scheduled run time, and (e) remind them CronBox must stay open in the menu bar.
+In your final reply: state (a) the script path you created, (b) the cron expression, (c) the timezone, (d) the next scheduled run time, and (e) remind them the CronBox service must stay running.
 
 ## CLI quick reference
 
 | Operation | Command |
 |---|---|
 | Self-check (CLI + DB) | `cronbox dirs list` |
+| Background service status | `cronbox service status` |
+| Install background service | `cronbox service install` |
 | Register a script file (manual mode) | `cronbox add <abs-script> --alias "<desc>"` |
 | Register a directory and pick scripts | `cronbox add <dir> --include <rel-script>` (repeatable) or `--all` |
 | List visible scripts | `cronbox scripts list` |
@@ -138,8 +140,8 @@ If the user wants extra notifications beyond the built-in macOS one — push to 
 
 | Symptom | Likely cause | What to tell the user |
 |---|---|---|
-| `command not found: cronbox` | Menu-bar app not installed, or CLI symlink missing | Install the CronBox app, or open it once to auto-install the CLI |
+| `command not found: cronbox` | CronBox binary not installed or not on PATH | Install the CronBox CLI and verify `cronbox help` |
 | `Script not found` from `schedules add` | Wrong path | Re-check; use absolute paths |
 | Job stays `skipped` | The previous run is still active (slow script) | Show `cronbox jobs list`; cron is too tight or the script hangs |
-| Schedule never fires | Menu-bar app isn't running | Tell the user to open CronBox.app |
-| Job log says `command not found` for a tool that works in their terminal | CronBox launched fresh and missed the user's `.zshrc` PATH | Have them restart the menu-bar app (PATH is resolved at startup) |
+| Schedule never fires | CronBox service isn't running | Run `cronbox service status`, then `cronbox service start` |
+| Job log says `command not found` for a tool that works in their terminal | CronBox started before the user's shell PATH changed | Restart the CronBox service (PATH is resolved at startup) |

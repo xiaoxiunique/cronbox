@@ -1,126 +1,106 @@
 # CronBox
 
-CronBox is a local-first menu bar scheduler for scripts and coding-agent tasks.
+CronBox is a local-first CLI scheduler for scripts and coding-agent tasks. The `cronbox` process runs the scheduler and serves a browser-based control panel on your computer.
 
-It scans folders for executable entry scripts, lets you run them manually or on recurring and one-shot schedules, and keeps run history with live logs in one place. Scheduled jobs keep running while the main window is closed, as long as CronBox is still active in the menu bar.
+```bash
+cronbox
+```
 
-## Status
-
-CronBox is early-stage software. Expect rough edges around packaging, platform-specific permissions, and coding-agent task execution. Issues and focused pull requests are welcome.
+This opens `http://127.0.0.1:4317`, where you can inspect scripts, schedules, run history, live logs, and current command status. The server binds to loopback only.
 
 ## Features
 
-- Add script directories and only surface files with executable entrypoints.
-- Schedule Bash, Python, Bun, PostgreSQL, Codex, and Claude task scripts as recurring jobs or one-shot runs.
-- Keep aliases, cron expressions, timezone, JSON args, enabled state, one-shot state, and history per script.
-- View run history and logs in a two-pane detail view.
-- Stream stdout and stderr while a job is running.
-- Skip a scheduled run when the previous run for the same schedule is still queued or running.
-- Send macOS notifications when scheduled jobs complete.
-- Manage directories, selected script entries, schedules, jobs, agent skills, and manual runs from the `cronbox` CLI.
-- Create Codex and Claude Code task scripts in the default `~/.cronbox` workspace.
-
-## Development
-
-CronBox is built with Tauri 2, Vue 3, TypeScript, and Rust.
-
-Requirements:
-
-- Bun
-- Rust stable
-- Tauri 2 platform prerequisites
-
-```bash
-bun install
-bun run tauri dev
-```
-
-Build the frontend:
-
-```bash
-bun run build
-```
-
-Run Rust checks and tests:
-
-```bash
-cd src-tauri
-cargo test
-```
+- Discover executable Bash, Python, Bun, and PostgreSQL entry scripts.
+- Run scripts manually or on recurring and one-shot cron schedules.
+- View queued, running, successful, failed, skipped, and cancelled jobs.
+- Stream stdout and stderr into persistent SQLite-backed job logs.
+- Skip overlapping runs for the same schedule.
+- Create Codex and Claude Code tasks in explicit local workspaces.
+- Manage directories, scripts, schedules, jobs, skills, export, and import from the CLI.
 
 ## Installation
 
-Install the latest published macOS release:
+Install the latest macOS binary and LaunchAgent:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xiaoxiunique/cronbox/main/scripts/install-macos.sh | bash
 ```
 
-The installer copies `CronBox.app` to `/Applications` and links the `cronbox` CLI into a writable bin directory such as `/opt/homebrew/bin`, `/usr/local/bin`, or `~/.local/bin`. To install a specific tag, set `CRONBOX_VERSION`, for example:
+The installer selects the correct Apple Silicon or Intel release, installs `cronbox` into a writable bin directory, and registers a per-user LaunchAgent. CronBox starts at login and restarts after unexpected exits. Set `CRONBOX_VERSION=v0.1.0` to install a specific tag or `CRONBOX_CLI_TARGET` to choose the destination.
+
+Install the Linux x64 binary and systemd user service:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/xiaoxiunique/cronbox/main/scripts/install-macos.sh | env CRONBOX_VERSION=v0.1.0 bash
+curl -fsSL https://raw.githubusercontent.com/xiaoxiunique/cronbox/main/scripts/install-linux.sh | bash
 ```
 
-## Packaging
+The Linux installer writes `~/.config/systemd/user/cronbox.service`, enables it for the user's default target, and starts it immediately. On headless machines that must keep running after logout, enable systemd user lingering once with `loginctl enable-linger "$USER"` if permitted by the host.
 
-GitHub Actions builds installers for macOS, Linux, and Windows.
+## Development
 
-- Pushes to `main` and manual workflow runs upload package artifacts.
-- Tags matching `v*`, for example `v0.1.0`, also create a draft GitHub Release with the generated installers attached.
-
-Create a release build:
+Requirements: Bun and Rust stable.
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+bun install
+bun run build
+bun run server
+```
+
+The production frontend is embedded in the Rust binary. For frontend hot reload, keep `bun run server` running and start `bun run dev` in another terminal, then open `http://127.0.0.1:5188`.
+
+Run checks:
+
+```bash
+bun run build
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
 ## CLI
 
-The desktop app installs the `cronbox` command on startup when possible. The CLI shares the same local data as the desktop app, but it does not open or control the UI. Running `cronbox` without arguments prints usage help.
+Running `cronbox` without arguments starts the scheduler and Web console. Use `cronbox serve --port 4400 --no-open` to choose a port or suppress automatic browser launch. `cronbox daemon` runs the scheduler without the Web console.
 
-You can also install it manually from Settings or with:
+Manage the background service with the same commands on macOS and Linux:
 
 ```bash
-bun run install-cli
+cronbox service install
+cronbox service status
+cronbox service restart
+cronbox service logs --follow
+cronbox service stop
+cronbox service uninstall
 ```
 
-Common commands:
+macOS uses `launchd`; Linux uses `systemd --user`. On Linux, `cronbox service logs --follow` reads the user journal.
 
 ```bash
-cronbox add ~/scripts
-cronbox add ~/scripts --include daily-report.sh
 cronbox add ~/scripts/cleanup.sh --alias "Clean temporary files"
+cronbox add ~/scripts --include daily-report.sh
 cronbox scripts list
 cronbox schedules add ./daily-report.sh "0 9 * * *" --tz Asia/Shanghai
 cronbox schedules add ./reminder.sh "* * * * *" --once
 cronbox jobs list
 cronbox run ~/scripts daily-report.sh --args '{"date":"today"}'
-cronbox skills install
+cronbox export --out cronbox.json
 ```
 
-`cronbox add <directory>` previews only scripts with executable entrypoints. Use `--include <relative-script>` to add selected entries, repeat `--include` for several scripts, or use `--all` for script directories where every entrypoint should be registered. `cronbox schedules add ... --once` creates a one-shot schedule that disables itself after its first trigger.
+The CLI, LaunchAgent, and Web console share the same local database. A scheduler lock prevents duplicate execution; a standby Web process automatically takes over when the active scheduler exits.
 
 ## Agent Tasks
 
-CronBox can generate local task scripts for Codex and Claude Code. By default those scripts run from:
-
-```text
-~/.cronbox
-```
-
-The workspace includes `AGENTS.md` and `CLAUDE.md` so you can keep durable rules for scheduled coding-agent tasks.
-
-To install the bundled Claude Code skill for scheduling recurring local tasks through CronBox, run:
+CronBox can generate task scripts for Codex and Claude Code. The default workspace is `~/.cronbox` and includes `AGENTS.md` and `CLAUDE.md` for durable task instructions.
 
 ```bash
 cronbox skills install
 ```
 
+## Packaging
+
+Release builds embed the Vue application into a single Rust binary. Tags matching `v*` create draft releases with macOS, Linux, and Windows archives.
+
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before opening a pull request. Please report security issues through the private channel described in [SECURITY.md](SECURITY.md).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Report security issues through the private channel in [SECURITY.md](SECURITY.md).
 
 ## License
 

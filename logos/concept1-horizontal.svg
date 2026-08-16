@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 120" width="340" height="120" role="img" aria-labelledby="c1h-title">
+  <title id="c1h-title">CronBox Logo</title>
+  <defs>
+    <linearGradient id="c1hg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+  <!-- Icon -->
+  <g transform="translate(0,0)">
+    <rect x="10" y="10" width="100" height="100" rx="22" fill="url(#c1hg)"/>
+    <circle cx="60" cy="55" r="28" fill="none" stroke="#fff" stroke-width="3.5" opacity="0.95"/>
+    <line x1="60" y1="30" x2="60" y2="35" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="85" y1="55" x2="80" y2="55" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="60" y1="80" x2="60" y2="75" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="35" y1="55" x2="40" y2="55" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="60" y1="55" x2="60" y2="38" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+    <line x1="60" y1="55" x2="48" y2="44" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="60" cy="55" r="3" fill="#fff"/>
+    <text x="38" y="102" font-family="'SF Mono','Menlo','Consolas',monospace" font-size="16" font-weight="700" fill="#fff" opacity="0.9">&gt;_</text>
+  </g>
+  <!-- Text -->
+  <text x="130" y="55" font-family="'SF Pro Display','Inter','Helvetica Neue',sans-serif" font-size="38" font-weight="700" fill="#1F2937">Cron</text>
+  <text x="228" y="55" font-family="'SF Pro Display','Inter','Helvetica Neue',sans-serif" font-size="38" font-weight="700" fill="#6366F1">Box</text>
+  <text x="130" y="82" font-family="'SF Mono','Menlo','Consolas',monospace" font-size="13" fill="#9CA3AF" letter-spacing="1.5">LOCAL SCHEDULER</text>
+</svg>

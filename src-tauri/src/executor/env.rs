@@ -8,16 +8,15 @@ static EFFECTIVE_PATH: OnceLock<String> = OnceLock::new();
 
 /// Resolve the login shell's PATH once and cache it for all script executions.
 ///
-/// Call this once at GUI startup. A GUI app launched from Finder is started by
-/// `launchd`, which never sources the user's shell rc files — so its PATH lacks
-/// Homebrew, `~/.bun/bin`, etc. and scripts fail to find `bun`/`uv`/`jq`.
+/// Call this once at service startup so scheduled scripts inherit tools from
+/// the user's login shell, including Homebrew, `bun`, `uv`, and `jq`.
 pub fn init_effective_path_from_login_shell() {
     let resolved = resolve_login_shell_path().unwrap_or_else(fallback_path);
     let _ = EFFECTIVE_PATH.set(resolved);
 }
 
 /// The PATH that scripts should run with. Falls back to the inherited process
-/// PATH when not initialized (CLI mode, tests) — the CLI already inherits the
+/// PATH when not initialized (subcommands and tests) — the CLI already inherits the
 /// terminal's full PATH.
 pub fn effective_path() -> String {
     EFFECTIVE_PATH

@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::{DateTime, Timelike, Utc};
-use tauri::State;
 
 use crate::cli;
 use crate::db::Database;
@@ -13,8 +12,7 @@ use crate::state::{entry_script_reason, scan_directory_entries, script_from_file
 
 type CmdResult<T> = Result<T, String>;
 
-#[tauri::command]
-pub fn dashboard_stats(state: State<AppState>) -> CmdResult<DashboardStats> {
+pub fn dashboard_stats(state: &AppState) -> CmdResult<DashboardStats> {
     let script_total = state.scan_scripts().len() as u32;
 
     let db = state.db.lock().map_err(|e| e.to_string())?;
@@ -67,8 +65,7 @@ fn schedule_distribution(schedules: &[Schedule]) -> Vec<ScheduleDistributionBuck
 
 // ── Work Dirs ──
 
-#[tauri::command]
-pub fn list_work_dirs(state: State<AppState>) -> CmdResult<Vec<WorkDir>> {
+pub fn list_work_dirs(state: &AppState) -> CmdResult<Vec<WorkDir>> {
     state
         .db
         .lock()
@@ -77,8 +74,7 @@ pub fn list_work_dirs(state: State<AppState>) -> CmdResult<Vec<WorkDir>> {
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn add_work_dir(state: State<AppState>, path: String) -> CmdResult<WorkDir> {
+pub fn add_work_dir(state: &AppState, path: String) -> CmdResult<WorkDir> {
     let p = PathBuf::from(&path);
     if !p.is_dir() {
         return Err(format!("Not a directory: {path}"));
@@ -91,8 +87,7 @@ pub fn add_work_dir(state: State<AppState>, path: String) -> CmdResult<WorkDir> 
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn add_work_dir_with_scan(state: State<AppState>, path: String) -> CmdResult<AddedWorkDir> {
+pub fn add_work_dir_with_scan(state: &AppState, path: String) -> CmdResult<AddedWorkDir> {
     let p = PathBuf::from(&path);
     if !p.is_dir() {
         return Err(format!("Not a directory: {path}"));
@@ -117,7 +112,6 @@ pub fn add_work_dir_with_scan(state: State<AppState>, path: String) -> CmdResult
     })
 }
 
-#[tauri::command]
 pub fn preview_script_entries(path: String) -> CmdResult<Vec<ScriptFile>> {
     let p = PathBuf::from(&path);
     if !p.is_dir() {
@@ -126,9 +120,8 @@ pub fn preview_script_entries(path: String) -> CmdResult<Vec<ScriptFile>> {
     Ok(scan_directory_entries(&p))
 }
 
-#[tauri::command]
 pub fn add_selected_scripts(
-    state: State<AppState>,
+    state: &AppState,
     base_dir: String,
     script_paths: Vec<String>,
 ) -> CmdResult<AddedWorkDir> {
@@ -170,8 +163,7 @@ pub fn add_selected_scripts(
     })
 }
 
-#[tauri::command]
-pub fn add_script_file(state: State<AppState>, path: String) -> CmdResult<AddedWorkDir> {
+pub fn add_script_file(state: &AppState, path: String) -> CmdResult<AddedWorkDir> {
     let p = PathBuf::from(&path);
     if !p.is_file() {
         return Err(format!("Not a file: {path}"));
@@ -192,8 +184,7 @@ pub fn add_script_file(state: State<AppState>, path: String) -> CmdResult<AddedW
     })
 }
 
-#[tauri::command]
-pub fn remove_work_dir(state: State<AppState>, id: String) -> CmdResult<bool> {
+pub fn remove_work_dir(state: &AppState, id: String) -> CmdResult<bool> {
     state
         .db
         .lock()
@@ -202,14 +193,12 @@ pub fn remove_work_dir(state: State<AppState>, id: String) -> CmdResult<bool> {
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn scan_scripts(state: State<AppState>) -> Vec<ScriptFile> {
+pub fn scan_scripts(state: &AppState) -> Vec<ScriptFile> {
     state.scan_scripts()
 }
 
-#[tauri::command]
 pub fn set_script_alias(
-    state: State<AppState>,
+    state: &AppState,
     base_dir: String,
     script_path: String,
     alias: Option<String>,
@@ -226,29 +215,26 @@ pub fn set_script_alias(
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn ensure_agent_workspace(state: State<AppState>) -> CmdResult<WorkDir> {
-    ensure_default_agent_workspace(&state)
+pub fn ensure_agent_workspace(state: &AppState) -> CmdResult<WorkDir> {
+    ensure_default_agent_workspace(state)
 }
 
-#[tauri::command]
 pub fn create_codex_task(
-    state: State<AppState>,
+    state: &AppState,
     name: String,
     prompt: String,
     base_dir: Option<String>,
 ) -> CmdResult<CreatedCodexTask> {
-    create_agent_task(&state, AgentTaskKind::Codex, name, prompt, base_dir)
+    create_agent_task(state, AgentTaskKind::Codex, name, prompt, base_dir)
 }
 
-#[tauri::command]
 pub fn create_claude_task(
-    state: State<AppState>,
+    state: &AppState,
     name: String,
     prompt: String,
     base_dir: Option<String>,
 ) -> CmdResult<CreatedCodexTask> {
-    create_agent_task(&state, AgentTaskKind::Claude, name, prompt, base_dir)
+    create_agent_task(state, AgentTaskKind::Claude, name, prompt, base_dir)
 }
 
 enum AgentTaskKind {
@@ -280,7 +266,7 @@ impl AgentTaskKind {
 }
 
 fn create_agent_task(
-    state: &State<AppState>,
+    state: &AppState,
     kind: AgentTaskKind,
     name: String,
     prompt: String,
@@ -342,7 +328,7 @@ fn create_agent_task(
     })
 }
 
-fn ensure_default_agent_workspace(state: &State<AppState>) -> CmdResult<WorkDir> {
+fn ensure_default_agent_workspace(state: &AppState) -> CmdResult<WorkDir> {
     let path = cli::default_agent_workspace_path();
     std::fs::create_dir_all(&path).map_err(|e| format!("Cannot create {}: {e}", path.display()))?;
     write_if_missing(&path.join("AGENTS.md"), default_agents_md())?;
@@ -366,7 +352,7 @@ fn ensure_default_agent_workspace(state: &State<AppState>) -> CmdResult<WorkDir>
 /// silently flipped. A newly registered directory uses **manual** mode so the
 /// rest of the user's codebase is not pulled into Scripts — only the new agent
 /// task script (added as an explicit entry below) surfaces.
-fn resolve_agent_target_dir(state: &State<AppState>, dir: &str) -> CmdResult<WorkDir> {
+fn resolve_agent_target_dir(state: &AppState, dir: &str) -> CmdResult<WorkDir> {
     let path = PathBuf::from(dir);
     if !path.is_dir() {
         return Err(format!("Not a directory: {dir}"));
@@ -559,9 +545,8 @@ fn make_executable(path: &Path) -> CmdResult<()> {
 
 // ── Schedules ──
 
-#[tauri::command]
 pub fn create_schedule(
-    state: State<AppState>,
+    state: &AppState,
     script_path: String,
     base_dir: String,
     cron_expr: String,
@@ -594,8 +579,7 @@ pub fn create_schedule(
     db.get_schedule(&schedule.id).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn list_schedules(state: State<AppState>) -> CmdResult<Vec<Schedule>> {
+pub fn list_schedules(state: &AppState) -> CmdResult<Vec<Schedule>> {
     state
         .db
         .lock()
@@ -604,9 +588,8 @@ pub fn list_schedules(state: State<AppState>) -> CmdResult<Vec<Schedule>> {
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
 pub fn update_schedule(
-    state: State<AppState>,
+    state: &AppState,
     id: String,
     cron_expr: Option<String>,
     timezone: Option<String>,
@@ -634,8 +617,7 @@ pub fn update_schedule(
     db.get_schedule(&id).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn set_schedule_enabled(state: State<AppState>, id: String, enabled: bool) -> CmdResult<()> {
+pub fn set_schedule_enabled(state: &AppState, id: String, enabled: bool) -> CmdResult<()> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.set_schedule_enabled(&id, enabled)
         .map_err(|e| e.to_string())?;
@@ -648,8 +630,7 @@ pub fn set_schedule_enabled(state: State<AppState>, id: String, enabled: bool) -
     Ok(())
 }
 
-#[tauri::command]
-pub fn delete_schedule(state: State<AppState>, id: String) -> CmdResult<bool> {
+pub fn delete_schedule(state: &AppState, id: String) -> CmdResult<bool> {
     state
         .db
         .lock()
@@ -660,9 +641,8 @@ pub fn delete_schedule(state: State<AppState>, id: String) -> CmdResult<bool> {
 
 // ── Jobs ──
 
-#[tauri::command]
 pub async fn run_now(
-    state: State<'_, AppState>,
+    state: &AppState,
     script_path: String,
     base_dir: String,
     args: String,
@@ -738,8 +718,7 @@ fn combined_logs(result: &ExecutionResult) -> String {
     }
 }
 
-#[tauri::command]
-pub fn list_jobs(state: State<AppState>, limit: u32) -> CmdResult<Vec<Job>> {
+pub fn list_jobs(state: &AppState, limit: u32) -> CmdResult<Vec<Job>> {
     state
         .db
         .lock()
@@ -748,9 +727,8 @@ pub fn list_jobs(state: State<AppState>, limit: u32) -> CmdResult<Vec<Job>> {
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
 pub fn list_jobs_for_script(
-    state: State<AppState>,
+    state: &AppState,
     script_path: String,
     base_dir: String,
     limit: u32,
@@ -763,8 +741,7 @@ pub fn list_jobs_for_script(
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn list_running_jobs(state: State<AppState>) -> CmdResult<Vec<Job>> {
+pub fn list_running_jobs(state: &AppState) -> CmdResult<Vec<Job>> {
     state
         .db
         .lock()
@@ -773,8 +750,7 @@ pub fn list_running_jobs(state: State<AppState>) -> CmdResult<Vec<Job>> {
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn get_job(state: State<AppState>, id: String) -> CmdResult<Job> {
+pub fn get_job(state: &AppState, id: String) -> CmdResult<Job> {
     state
         .db
         .lock()
@@ -783,8 +759,7 @@ pub fn get_job(state: State<AppState>, id: String) -> CmdResult<Job> {
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn cancel_job(state: State<AppState>, id: String) -> CmdResult<bool> {
+pub fn cancel_job(state: &AppState, id: String) -> CmdResult<bool> {
     state
         .db
         .lock()
@@ -793,8 +768,7 @@ pub fn cancel_job(state: State<AppState>, id: String) -> CmdResult<bool> {
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn cleanup_old_jobs(state: State<AppState>, days: u32) -> CmdResult<u64> {
+pub fn cleanup_old_jobs(state: &AppState, days: u32) -> CmdResult<u64> {
     state
         .db
         .lock()
@@ -806,35 +780,29 @@ pub fn cleanup_old_jobs(state: State<AppState>, days: u32) -> CmdResult<u64> {
 
 // ── Utilities ──
 
-#[tauri::command]
 pub fn cli_status() -> String {
     cli::cli_status_text(None)
 }
 
-#[tauri::command]
 pub fn install_cli(force: bool) -> CmdResult<String> {
     cli::install_cli_link(None, force).map(|path| path.display().to_string())
 }
 
 /// The PATH that scheduled scripts run with — resolved from the login shell at
 /// startup. Surfaced read-only in Settings so users can see what is in effect.
-#[tauri::command]
 pub fn resolved_path() -> String {
     executor::env::effective_path()
 }
 
-#[tauri::command]
 pub fn validate_cron(cron_expr: String) -> CmdResult<()> {
     scheduler::validate_cron(&cron_expr)
 }
 
-#[tauri::command]
 pub fn upcoming_runs(cron_expr: String, timezone: String, count: u32) -> CmdResult<Vec<String>> {
     scheduler::upcoming_runs(&cron_expr, &timezone, count as usize)
 }
 
 /// Detect script parameters by running `script --help` and parsing the output
-#[tauri::command]
 pub async fn detect_args(script_path: String, base_dir: String) -> CmdResult<Vec<ScriptParam>> {
     let full = PathBuf::from(&base_dir).join(&script_path);
     if !full.exists() {

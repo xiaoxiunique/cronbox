@@ -1,59 +1,36 @@
 # Contributing to CronBox
 
-Thanks for helping improve CronBox. This project is a local-first desktop app, so changes should stay practical, inspectable, and conservative by default.
+CronBox is a local-first CLI service with a Vue control panel and Rust scheduler. Keep changes practical, inspectable, and focused.
 
 ## Development Setup
 
-Requirements:
-
-- Bun
-- Rust stable
-- Platform dependencies required by Tauri 2
-
-Install dependencies and start the app:
+Install Bun and Rust stable, then run:
 
 ```bash
 bun install
-bun run tauri dev
+bun run build
+bun run server
 ```
 
-Run the frontend build:
+The server is available at `http://127.0.0.1:4317`. For frontend hot reload, run `bun run dev` in a second terminal and use `http://127.0.0.1:5188`; Vite proxies `/api` to the Rust server.
+
+Before opening a pull request, run:
 
 ```bash
 bun run build
-```
-
-Run Rust tests:
-
-```bash
-cd src-tauri
-cargo test
-```
-
-Run formatting checks before opening a pull request:
-
-```bash
-cd src-tauri
-cargo fmt -- --check
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
 ## Pull Requests
 
 - Keep changes focused and reviewable.
-- Add or update tests when behavior changes.
-- Update README or other docs when user-visible behavior changes.
-- Avoid new dependencies unless they remove meaningful complexity.
-- Do not commit build outputs, local databases, logs, or generated package artifacts.
+- Add or update Rust tests when scheduler, API, database, CLI, or executor behavior changes.
+- Manually verify affected browser workflows.
+- Update documentation for user-visible behavior.
+- Avoid dependencies that do not remove meaningful complexity.
+- Do not commit `dist`, build outputs, local databases, logs, or secrets.
 
 ## Product Direction
 
-CronBox is intended to feel like a compact local operations tool:
-
-- local-first scheduler
-- menu bar runtime
-- script entrypoint scanning
-- history-first log views
-- CLI parity for core management
-- coding-agent tasks that run from explicit local workspaces
-
-Prefer changes that make recurring local work easier to run, inspect, and recover from.
+Prefer changes that improve recurring local work: reliable scheduling, clear command status, useful logs, explicit script discovery, and straightforward recovery. Production startup uses a per-user macOS LaunchAgent or Linux systemd user service; the management interface is a local Web console. Do not add desktop-window or tray dependencies.

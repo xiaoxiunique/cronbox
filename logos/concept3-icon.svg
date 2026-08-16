@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-labelledby="c3-title">
+  <title id="c3-title">CronBox Logo</title>
+  <defs>
+    <linearGradient id="c3g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#EF4444"/>
+    </linearGradient>
+    <linearGradient id="c3bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E1B4B"/>
+      <stop offset="100%" stop-color="#312E81"/>
+    </linearGradient>
+  </defs>
+  <!-- Dark background box -->
+  <rect x="6" y="6" width="108" height="108" rx="18" fill="url(#c3bg)"/>
+  <!-- Terminal window chrome -->
+  <circle cx="22" cy="22" r="4" fill="#EF4444" opacity="0.9"/>
+  <circle cx="34" cy="22" r="4" fill="#F59E0B" opacity="0.9"/>
+  <circle cx="46" cy="22" r="4" fill="#22C55E" opacity="0.9"/>
+  <!-- Divider line -->
+  <line x1="16" y1="32" x2="104" y2="32" stroke="#4338CA" stroke-width="1" opacity="0.5"/>
+  <!-- Cron expression line -->
+  <text x="20" y="52" font-family="'SF Mono','Menlo','Consolas',monospace" font-size="11" fill="#818CF8" opacity="0.7">$</text>
+  <text x="32" y="52" font-family="'SF Mono','Menlo','Consolas',monospace" font-size="11" fill="#F59E0B">*/5 * * * *</text>
+  <!-- Script path -->
+  <text x="20" y="70" font-family="'SF Mono','Menlo','Consolas',monospace" font-size="11" fill="#818CF8" opacity="0.7">$</text>
+  <text x="32" y="70" font-family="'SF Mono','Menlo','Consolas',monospace" font-size="11" fill="#22C55E">./run.sh</text>
+  <!-- Status indicator -->
+  <circle cx="20" cy="86" r="3.5" fill="#22C55E"/>
+  <text x="28" y="90" font-family="'SF Mono','Menlo','Consolas',monospace" font-size="10" fill="#9CA3AF">ok 0.4s</text>
+  <!-- Blinking cursor -->
+  <rect x="20" y="96" width="7" height="12" fill="#F59E0B" opacity="0.8">
+    <animate attributeName="opacity" values="0.8;0;0.8" dur="1.2s" repeatCount="indefinite"/>
+  </rect>
+</svg>

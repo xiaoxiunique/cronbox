@@ -295,6 +295,43 @@ impl Database {
         self.get_schedule(&id)
     }
 
+    /// Insert or replace a schedule from an import bundle, preserving its `id`
+    /// and enabled/one_shot state. `next_run_at` is supplied by the caller
+    /// (recomputed for the target timezone); `last_run_at` is cleared.
+    pub fn import_schedule(&self, s: &Schedule) -> SqlResult<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO schedules
+               (id, script_path, base_dir, cron_expr, timezone, args, enabled, next_run_at, last_run_at, created_at, updated_at, env, one_shot)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, ?9, ?9, ?10, ?11)
+             ON CONFLICT(id) DO UPDATE SET
+               script_path = excluded.script_path,
+               base_dir    = excluded.base_dir,
+               cron_expr   = excluded.cron_expr,
+               timezone    = excluded.timezone,
+               args        = excluded.args,
+               enabled     = excluded.enabled,
+               next_run_at = excluded.next_run_at,
+               updated_at  = excluded.updated_at,
+               env         = excluded.env,
+               one_shot    = excluded.one_shot",
+            params![
+                s.id,
+                s.script_path,
+                s.base_dir,
+                s.cron_expr,
+                s.timezone,
+                s.args,
+                s.enabled as i32,
+                s.next_run_at,
+                now,
+                s.env,
+                s.one_shot as i32
+            ],
+        )?;
+        Ok(())
+    }
+
     pub fn get_schedule(&self, id: &str) -> SqlResult<Schedule> {
         self.conn.query_row(
             "SELECT id, script_path, base_dir, cron_expr, timezone, args, enabled, next_run_at, last_run_at, created_at, updated_at, env, one_shot FROM schedules WHERE id = ?1",
@@ -527,7 +564,7 @@ impl Database {
     }
 
     /// Reconcile any queued/running jobs left from a previous process. Call
-    /// this at GUI startup — a fresh process cannot have in-flight jobs, so
+    /// this when the scheduler starts — a fresh process cannot have in-flight jobs, so
     /// anything still in those statuses is a zombie from when CronBox was
     /// interrupted mid-run. They are marked as cancelled with an explicit
     /// reason so the tray, dashboard, and skip-if-active logic all see them

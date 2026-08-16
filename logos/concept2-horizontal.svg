@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 120" width="340" height="120" role="img" aria-labelledby="c2h-title">
+  <title id="c2h-title">CronBox Logo</title>
+  <defs>
+    <linearGradient id="c2hg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0EA5E9"/>
+      <stop offset="100%" stop-color="#6366F1"/>
+    </linearGradient>
+  </defs>
+  <!-- Icon -->
+  <g transform="translate(0,0)">
+    <rect x="8" y="8" width="104" height="104" rx="20" fill="none" stroke="url(#c2hg)" stroke-width="4"/>
+    <g fill="none" stroke="url(#c2hg)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M60,28 L82,50"/>
+      <polygon points="82,50 74,44 78,53" fill="url(#c2hg)" stroke="none"/>
+      <path d="M82,54 L60,82"/>
+      <polygon points="60,82 66,74 57,76" fill="url(#c2hg)" stroke="none"/>
+      <path d="M56,80 L38,50"/>
+      <polygon points="38,50 40,60 46,52" fill="url(#c2hg)" stroke="none"/>
+      <path d="M40,46 L56,28"/>
+      <polygon points="56,28 48,34 54,38" fill="url(#c2hg)" stroke="none"/>
+    </g>
+    <rect x="48" y="43" width="24" height="24" rx="5" fill="url(#c2hg)"/>
+    <line x1="54" y1="50" x2="66" y2="50" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+    <line x1="54" y1="56" x2="62" y2="56" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+  </g>
+  <!-- Text -->
+  <text x="130" y="55" font-family="'SF Pro Display','Inter','Helvetica Neue',sans-serif" font-size="38" font-weight="700" fill="#1F2937">Cron</text>
+  <text x="228" y="55" font-family="'SF Pro Display','Inter','Helvetica Neue',sans-serif" font-size="38" font-weight="700" fill="#0EA5E9">Box</text>
+  <text x="130" y="82" font-family="'SF Mono','Menlo','Consolas',monospace" font-size="13" fill="#9CA3AF" letter-spacing="1.5">LOCAL SCHEDULER</text>
+</svg>
