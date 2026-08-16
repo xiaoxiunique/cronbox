@@ -1,0 +1,126 @@
+# CronBox
+
+> CronBox 是一个本地优先（local-first）的脚本与编码代理（coding agent）任务调度器。运行 `cronbox` 命令即可启动调度器，并在浏览器中打开一个本机管理控制台（默认 http://127.0.0.1:4317），用于查看脚本、调度、运行历史、实时日志与当前命令状态。
+
+## 项目说明
+
+CronBox 是单二进制应用：同一个 `cronbox` 可执行文件既是 CLI 也是 Web 控制台服务端。它面向"本地自动化脚本"场景设计——不该塞进服务器、但又不能靠记忆执行的本地任务（备份、数据抓取、日报生成、agent 任务等），都可以用 cron 表达式调度，并留下完整日志和历史。
+
+### 技术栈与架构
+
+- **后端**：Rust。axum 提供 HTTP API；rusqlite（SQLite，WAL 模式）持久化；croner 解析 cron 表达式；tokio 异步运行时。
+- **前端**：Vue 3 + TypeScript + Vite，构建产物通过 rust-embed 直接嵌入二进制，无需单独部署前端。
+- **存储**：SQLite 是唯一数据源（macOS 位于 `~/Library/Application Support/com.cronbox.app/cronbox.db`，Linux 位于 `~/.local/share/com.cronbox.app/cronbox.db`）。CLI、后台服务、Web 控制台共享同一数据库；调度锁防止多进程重复执行。
+- **支持的脚本语言**：Bash、Python、Bun、PostgreSQL（pgsql）。目录扫描按 shebang、`__main__` 守卫、`import.meta.main`、可执行位等启发式识别"入口脚本"。
+
+### 核心特性
+
+- 选择式入口扫描：添加目录时先预览候选脚本，用 `--include` 或 `--all` 决定哪些进入 CronBox。
+- 标准 cron 重复调度与一次性（`--once`）调度；同一调度上一轮未结束时自动跳过（重叠保护）。
+- 运行状态追踪（queued / running / success / failed / skipped / cancelled）与实时日志：进程运行时 stdout/stderr 即持续写入任务历史。
+- 为 Codex 与 Claude Code 生成定时 agent 任务脚本，默认工作区 `~/.cronbox`，自带 `AGENTS.md` / `CLAUDE.md` 保持 agent 行为一致。
+- 参数以 JSON 形式存储，运行脚本时同时以环境变量（`CRONBOX_ARGS` + 按 key 的 `ARG_<KEY>` / `$KEY`）和转换后的 CLI flags 传入，脚本可任选一种消费方式。
+- 支持 macOS LaunchAgent 与 Linux systemd 用户服务托管，崩溃自动重启。
+
+## 安装
+
+```bash
+# macOS（自动选择 Apple Silicon / Intel）
+curl -fsSL https://raw.githubusercontent.com/xiaoxiunique/cronbox/main/scripts/install-macos.sh | bash
+
+# Linux x64
+curl -fsSL https://raw.githubusercontent.com/xiaoxiunique/cronbox/main/scripts/install-linux.sh | bash
+```
+
+安装脚本下载自包含二进制，注册后台服务（macOS LaunchAgent / Linux systemd 用户服务），并支持 `CRONBOX_VERSION=v0.1.0` 指定版本。
+
+## 用法
+
+### 启动
+
+```bash
+cronbox                        # 启动调度器 + Web 控制台（127.0.0.1:4317）
+cronbox serve --port 4400 --no-open   # 指定端口 / 不自动打开浏览器
+cronbox daemon                 # 仅运行调度器，不启动 Web 控制台
+```
+
+### CLI 命令一览
+
+```bash
+# 注册脚本
+cronbox add ~/scripts/cleanup.sh --alias "Clean temporary files"   # 单个脚本文件
+cronbox add ~/scripts --include daily-report.sh                    # 目录 + 选择入口（可重复 --include，或 --all）
+
+# 工作目录与脚本
+cronbox dirs list / add <path> / remove <id-or-path>
+cronbox scripts list
+
+# 调度
+cronbox schedules list
+cronbox schedules add ./daily-report.sh "0 9 * * *" --tz Asia/Shanghai   # 每天 9 点（默认时区 Asia/Shanghai）
+cronbox schedules add ./reminder.sh "* * * * *" --once                    # 每分钟触发一次后自动禁用
+cronbox schedules enable|disable|delete <id-prefix>
+
+# 任务与日志
+cronbox jobs list [limit]
+cronbox jobs running
+cronbox jobs show <id-prefix>
+cronbox jobs cancel <id-prefix>
+cronbox jobs cleanup [days]
+
+# 手动运行
+cronbox run ~/scripts daily-report.sh --args '{"date":"today"}'
+
+# 导出 / 导入（路径自动相对 $HOME 可移植化）
+cronbox export --out cronbox.json
+cronbox import cronbox.json
+
+# 后台服务
+cronbox service install / status / start / stop / restart / logs [--follow] / uninstall
+
+# 其它
+cronbox install-cli [--target PATH] [--force]
+cronbox cli-status
+cronbox skills install [--force] / status / uninstall
+```
+
+### 认证与远程部署
+
+默认 Web 控制台只绑定 `127.0.0.1` 且无需密码。要在网络上暴露（例如部署到 Linux 服务器后从其他机器访问），必须绑定非回环地址并设置访问令牌：
+
+```bash
+cronbox serve --host 0.0.0.0 --auth-token 'pick-a-long-random-token'
+```
+
+- 令牌也可通过环境变量 `CRONBOX_AUTH_TOKEN` 提供；绑定非回环地址而未设置令牌时，启动会被拒绝。
+- 开启认证后，浏览器首次访问会看到内置登录页；API 调用需携带 `Authorization: Bearer <token>` 请求头（curl 示例：`curl -H "Authorization: Bearer $CRONBOX_AUTH_TOKEN" -H 'Content-Type: application/json' -d '{}' http://host:4317/api/invoke/list_schedules`）。
+- `GET /api/health` 保持公开（仅返回 `ok` 与 `scheduler_active` 两个布尔值，不含业务数据），供部署探活。
+- 以服务方式运行时，安装前导出令牌即可烘焙进服务配置：`CRONBOX_AUTH_TOKEN='...' cronbox service install`。
+
+### Agent 任务
+
+```bash
+cronbox skills install        # 安装 Claude Code skill，让 agent 直接使用 CronBox CLI 创建定时任务
+```
+
+生成的 Codex / Claude 任务脚本存放在 `~/.cronbox`，例如：
+
+```bash
+cd ~/.cronbox
+codex exec -C ~/.cronbox --sandbox workspace-write --skip-git-repo-check -
+```
+
+## 开发
+
+- 依赖：Bun + Rust stable。
+- `bun install` 安装前端依赖；`bun run build` 类型检查并构建前端（产物被 Rust 嵌入，编译 Rust 前需先构建一次）。
+- `bun run server` 启动调度器与 Web 控制台；`bun run dev` 启动 Vite 热更新（端口 5188，`/api` 代理到 Rust 服务）。
+- `cargo test --manifest-path src-tauri/Cargo.toml` 运行 Rust 单元与集成测试；`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` 检查格式。
+- 源码布局：前端 `src/`（视图 `src/views`、组件 `src/components`、API 封装 `src/lib/api.ts`）；后端 `src-tauri/src/`（调度器 `scheduler.rs`、HTTP 服务 `web.rs`、CLI `cli.rs`、执行器 `executor/`、集成测试 `src-tauri/tests/`）。
+
+## 相关链接
+
+- 官方网站：https://cronbox.dev
+- GitHub 仓库：https://github.com/xiaoxiunique/cronbox
+- README（完整文档）：https://github.com/xiaoxiunique/cronbox/blob/main/README.md
+- 协议：MIT
