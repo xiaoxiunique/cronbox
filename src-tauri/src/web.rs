@@ -204,7 +204,8 @@ async fn require_auth(State(state): State<WebState>, request: Request, next: Nex
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
-        .is_some_and(|token| constant_time_eq(token, expected));
+        .is_some_and(|token| constant_time_eq(token, expected))
+        || auth_cookie_token(&request).is_some_and(|token| constant_time_eq(token, expected));
     if authorized {
         return next.run(request).await;
     }
@@ -245,12 +246,50 @@ fn constant_time_eq(left: &str, right: &str) -> bool {
         == 0
 }
 
+/// Session cookie name set on successful login so browser page reloads (which
+/// cannot carry an `Authorization` header) stay authenticated.
+pub const AUTH_COOKIE_NAME: &str = "cronbox_token";
+
+/// Token from the `cronbox_token` cookie, if present.
+fn auth_cookie_token(request: &Request) -> Option<&str> {
+    request
+        .headers()
+        .get(header::COOKIE)?
+        .to_str()
+        .ok()?
+        .split(';')
+        .find_map(|part| {
+            let (key, value) = part.trim().split_once('=')?;
+            (key == AUTH_COOKIE_NAME).then_some(value)
+        })
+}
+
+/// Whether a token is safe to embed in a `Set-Cookie` header verbatim.
+fn cookie_safe_token(token: &str) -> bool {
+    !token.is_empty()
+        && token.len() <= 128
+        && token
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'_' || b == b'-')
+}
+
 async fn login(State(state): State<WebState>, Json(body): Json<LoginArgs>) -> Response {
     let Some(expected) = state.auth_token.as_deref() else {
         return Json(serde_json::json!({ "ok": true })).into_response();
     };
     if constant_time_eq(&body.token, expected) {
-        Json(serde_json::json!({ "ok": true })).into_response()
+        let mut response = Json(serde_json::json!({ "ok": true })).into_response();
+        if cookie_safe_token(&body.token) {
+            // HttpOnly: JS cannot read it, which keeps XSS from stealing it.
+            // SameSite=Lax: cross-site requests do not carry it (CSRF guard).
+            if let Ok(value) = HeaderValue::from_str(&format!(
+                "{AUTH_COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000",
+                token = body.token
+            )) {
+                response.headers_mut().insert(header::SET_COOKIE, value);
+            }
+        }
+        response
     } else {
         (
             StatusCode::UNAUTHORIZED,
@@ -838,6 +877,14 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+        assert!(response
+            .headers()
+            .get(header::SET_COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|v| v.contains("cronbox_token=secret-token")
+                && v.contains("HttpOnly")
+                && v.contains("SameSite=Lax")
+                && v.contains("Path=/")));
 
         let response = router
             .oneshot(
@@ -852,6 +899,44 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         cleanup(&state);
+    }
+
+    #[tokio::test]
+    async fn auth_accepts_session_cookie() {
+        let state = test_state(Some("secret-token"));
+        let router = build_router(state.clone());
+        let response = api_request(router, None).await;
+        // no header, no cookie -> rejected (baseline for the next assertion)
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let router = build_router(state.clone());
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/invoke/dashboard_stats")
+                    .method("POST")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::COOKIE, "cronbox_token=secret-token")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        cleanup(&state);
+    }
+
+    #[test]
+    fn cookie_safe_token_accepts_common_tokens() {
+        assert!(cookie_safe_token("secret-token"));
+        assert!(cookie_safe_token("13541863172.."));
+        assert!(cookie_safe_token(
+            "315c33567d709f9c610382596e85ddcaacaed81249ceb230"
+        ));
+        assert!(!cookie_safe_token(""));
+        assert!(!cookie_safe_token("has space"));
+        assert!(!cookie_safe_token("has;semicolon"));
+        assert!(!cookie_safe_token(&"x".repeat(200)));
     }
 
     #[tokio::test]
