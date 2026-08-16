@@ -245,13 +245,14 @@ fn install() -> Result<i32, String> {
         .map_err(|e| format!("cannot resolve current executable: {e}"))?
         .canonicalize()
         .map_err(|e| format!("cannot resolve executable path: {e}"))?;
+    let auth_token = configured_auth_token();
     let unit_path = systemd_unit_path()?;
     if let Some(parent) = unit_path.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
     }
 
-    let unit = render_systemd_unit(&executable)?;
+    let unit = render_systemd_unit(&executable, auth_token.as_deref())?;
     let temporary = unit_path.with_extension("service.tmp");
     fs::write(&temporary, unit)
         .map_err(|e| format!("cannot write {}: {e}", temporary.display()))?;
@@ -268,6 +269,9 @@ fn install() -> Result<i32, String> {
     println!("CronBox service installed and started");
     println!("  executable: {}", executable.display());
     println!("  unit:       {}", unit_path.display());
+    if auth_token.is_some() {
+        println!("  auth:       enabled (CRONBOX_AUTH_TOKEN set)");
+    }
     println!("  web:        http://127.0.0.1:4317");
     Ok(0)
 }
