@@ -217,6 +217,10 @@ async fn require_auth(State(state): State<WebState>, request: Request, next: Nex
     if wants_html {
         let mut response = (StatusCode::UNAUTHORIZED, login_page()).into_response();
         response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("text/html; charset=utf-8"),
+        );
+        response.headers_mut().insert(
             header::WWW_AUTHENTICATE,
             HeaderValue::from_static("Bearer realm=\"cronbox\""),
         );
@@ -800,6 +804,13 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
+            Some("text/html; charset=utf-8")
+        );
         let body = axum::body::to_bytes(response.into_body(), 64 * 1024)
             .await
             .unwrap();
