@@ -40,7 +40,8 @@ fi
 ASSET="CronBox-macos-${ARCH}.tar.gz"
 DOWNLOAD_URL="${CRONBOX_DOWNLOAD_URL:-$(
   curl -fsSL -H "Accept: application/vnd.github+json" -H "User-Agent: cronbox-installer" "$API_URL" |
-    sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' |
+    grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*"' |
+    sed -n 's/.*"\([^"]*\)"$/\1/p' |
     grep "/${ASSET}$" |
     head -n 1
 )}"
